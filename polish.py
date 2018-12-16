@@ -5,32 +5,21 @@ from handlers.FileManager import FileManager
 import argparse
 
 
-def main(reads_file_path, true_ref_sequence_path=None, output_dir=None):
+def main(input_file_path, true_ref_sequence_path=None, output_dir=None):
     if output_dir is None:
         output_dir = "./"
     else:
         FileManager.ensure_directory_exists(output_dir)
 
-    assembly_sequence_filename = assemble_wtdbg2(output_dir=output_dir,
-                                                 input_file_path=reads_file_path)
-
-    reads_vs_ref_sam_filename, reads_vs_ref_bam_filename = align_minimap(output_dir=output_dir,
-                                                                         ref_sequence_path=assembly_sequence_filename,
-                                                                         reads_sequence_path=reads_file_path)
 
     polished_ref_sequence_filename = polish_racon(output_dir=output_dir,
-                                                  reads_file_path=reads_file_path,
+                                                  reads_file_path=input_file_path,
                                                   reads_vs_ref_sam_path=reads_vs_ref_sam_filename,
                                                   ref_sequence_path=assembly_sequence_filename)
 
-    if true_ref_sequence_path is not None:
-        assembled_vs_true_ref_sam_filename = align_minimap(output_dir=output_dir,
-                                                           ref_sequence_path=true_ref_sequence_path,
-                                                           reads_sequence_path=assembly_sequence_filename)
-
-        polished_vs_true_ref_sam_filename = align_minimap(output_dir=output_dir,
-                                                          ref_sequence_path=true_ref_sequence_path,
-                                                          reads_sequence_path=polished_ref_sequence_filename)
+    polished_vs_true_ref_sam_filename = align_minimap(output_dir=output_dir,
+                                                      ref_sequence_path=true_ref_sequence_path,
+                                                      reads_sequence_path=polished_ref_sequence_filename)
 
 
 if __name__ == "__main__":
