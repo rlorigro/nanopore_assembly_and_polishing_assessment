@@ -19,7 +19,11 @@ Optional Arguments:
                         run time if doesn't exist)
 ```
 
-Using a nanopolished E. Coli assembly aligned to the k12 reference (BAM), this script yields the following output:
+Using a polished E. Coli assembly aligned to the k12 reference (BAM), this script yields the following plot:
+
+![example output plot](https://github.com/rlorigro/nanopore_assembly_and_polishing_assessment/raw/master/assembled_wtdbg2_r94_ec_rad2_30x-30kb_VS_refEcoli.sorted.png)
+
+It is apparent that the aligner has chosen to break up the contig into multiple supplementary alignments because the chromosome is circular, and there appear to be poorly assembled regions along it. The following (verbose data) is printed to stdout:
 
 ```
 chromosome_name:         gi
