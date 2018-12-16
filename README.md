@@ -40,18 +40,7 @@ n_total_deletes:         1728
 n_total_inserts:         225
 identity:        0.9953598381930079
 
-ctg4
-reversed:        False
-alignment_start:         58747
-alignment_length:        8389
-read_length:             8136
-n_initial_clipped_bases: 35
-n_total_mismatches:      524
-n_total_deletes:         590
-n_total_inserts:         248
-identity:        0.8858698940998487
-
-... (more output omitted) ...
+... (more output for each alignment omitted for brevity) ...
 
 TOTAL IDENTITY:  0.9954066201845397
 ```
