@@ -5,8 +5,15 @@ class FastaWriter:
         self.file_path = output_file_path
         self.label_prefix = label_prefix + "_"
 
-    def write_sequences(self, sequences, labels=None, reversal_statuses=None):
-        with open(self.file_path, 'w') as file:
+        open(output_file_path, 'w').close()
+
+    def write_file(self, sequences, labels=None, reversal_statuses=None, append=False):
+        file_operation = "w"
+
+        if append:
+            file_operation = "a"
+
+        with open(self.file_path, file_operation) as file:
             for i in range(len(sequences)):
                 sequence = sequences[i]
 
@@ -26,6 +33,23 @@ class FastaWriter:
                                                        i=i)
 
                 file.write(string)
+
+            if append:
+                file.write("\n")
+
+    def write_entry(self, sequence, label=None, reversal=None, i=None):
+        if label is None and i is None:
+            exit("If no label is given, index must be provided")
+
+        file_operation = "a"
+
+        with open(self.file_path, file_operation) as file:
+            string = self.generate_sequence_string(sequence=sequence,
+                                                   label=label,
+                                                   reversal=reversal,
+                                                   i=i)
+
+            file.write(string)
 
     def generate_label_string(self, label, reversal, i):
         if label is None:

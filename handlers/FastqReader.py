@@ -10,6 +10,11 @@ class FastqReader:
         self.quality = None
 
     def iterate_file(self, path):
+        """
+        A generator-like function that returns a list of [header, sequence, quality] for each read in the FASTQ file
+        :param path:
+        :return:
+        """
         reads_file = open(path, "r")
 
         for l,line in enumerate(reads_file):
