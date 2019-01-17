@@ -19,12 +19,12 @@ Automation of pipelines that depend on preexisting assembly, polishing, and alig
 
 Running contig identity and mapping assessment:
 ```
-summarize_contig_identities_and_alignments.py --bam BAM --ref REF [--output_dir OUTPUT_DIR]
+align_and_summarize_contigs.py --sequences SEQUENCES --ref REF [--output_dir OUTPUT_DIR]
 
 Required arguments:
-  --bam BAM             BAM file path of contigs aligned to true reference
-  --ref REF             FASTA file path of true reference to be compared
-                        against
+  --sequences SEQUENCES   FASTA file path of contig sequences
+  --ref REF               FASTA file path of true reference to be compared
+                          against
 
 Optional Arguments:
   --output_dir OUTPUT_DIR
@@ -36,7 +36,7 @@ Using a polished E. Coli assembly aligned to the k12 reference (BAM), this scrip
 
 ![example output plot](https://github.com/rlorigro/nanopore_assembly_and_polishing_assessment/raw/master/assembled_wtdbg2_r94_ec_rad2_30x-30kb_VS_refEcoli.sorted.png)
 
-It is apparent that the aligner has chosen to break up the contig into multiple supplementary alignments because the chromosome is circular, and there appear to be poorly assembled regions along it. The following (verbose data) is printed to stdout:
+It is apparent that the aligner has chosen to break up the contig into multiple supplementary alignments because the chromosome is circular, and there appear to be poorly assembled regions along it. The following (verbose data) is printed to stdout (and exported to a tabular csv format):
 
 ```
 chromosome_name:         gi
