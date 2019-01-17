@@ -13,14 +13,15 @@ Generate stats/plots on contig identity and alignment given a BAM of contigs VS 
 READ_ID = 0
 REVERSAL_STATUS = 1
 REF_ALIGNMENT_START = 2
-ALIGNMENT_LENGTH = 3
-READ_LENGTH = 4
-CONTIG_LENGTH = 5
-N_INITIAL_CLIPPED_BASES = 6
-N_TOTAL_MISMATCHES = 7
-N_TOTAL_DELETES = 8
-N_TOTAL_INSERTS = 9
-IDENTITY = 10
+REF_ALIGNMENT_STOP = 3
+ALIGNMENT_LENGTH = 4
+READ_LENGTH = 5
+CONTIG_LENGTH = 6
+N_INITIAL_CLIPPED_BASES = 7
+N_TOTAL_MISMATCHES = 8
+N_TOTAL_DELETES = 9
+N_TOTAL_INSERTS = 10
+IDENTITY = 11
 
 
 def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, alignment_length, scale, color, contig_length):
@@ -80,7 +81,7 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
     figure = pyplot.figure()
     axes = pyplot.axes()
 
-    read_data = sorted(read_data, key=lambda x: x[READ_ID])
+    read_data = sorted(read_data, key=lambda x: x[REF_ALIGNMENT_START])
 
     left_column_offset = -6
     column_width = 3
@@ -170,6 +171,10 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
 
     x = -(chromosome_length / scale) + left_column_offset + column_width
     pyplot.text(x, y, str(round(total_identity*100, 3)))
+
+    # ---- fig size ----
+
+    figure.set_size_inches(max(6, (x_max-x_min)/2 + 1), (y_max - y_min)/2 + 1)
 
     # ---- chromosome title ----
 
@@ -288,6 +293,8 @@ def get_read_stop_position(read):
     ref_alignment_stop = read.reference_end
 
     # only find the position if the reference end is fetched as none from pysam API
+    # From pysam docs:
+    #   "None values will be included for any soft-clipped or unaligned positions within the read."
     if ref_alignment_stop is None:
         positions = read.get_reference_positions()
 
@@ -386,6 +393,7 @@ def parse_reads(reads, chromosome_name, fasta_handler):
         data = [read_id,
                 reversal_status,
                 ref_alignment_start,
+                ref_alignment_stop,
                 ref_length,
                 read_length,
                 contig_length,
@@ -408,7 +416,7 @@ def process_bam(bam_path, reference_path, output_dir=None):
     :param output_dir: where to save plots
     :return:
     """
-    print("\n" + bam_path + "\n")
+    print("\n" + bam_path)
 
     if output_dir is None:
         output_dir = "plots/"
@@ -420,6 +428,8 @@ def process_bam(bam_path, reference_path, output_dir=None):
 
     chromosome_names = fasta_handler.get_contig_names()
 
+    print(chromosome_names)
+
     for chromosome_name in chromosome_names:
         chromosome_length = fasta_handler.get_chr_sequence_length(chromosome_name)
 
@@ -430,15 +440,19 @@ def process_bam(bam_path, reference_path, output_dir=None):
 
         read_data = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
 
-        print("chromosome_name:\t", chromosome_name)
-        print("chromosome_length:\t", chromosome_length)
+        # print("chromosome_name:\t", chromosome_name)
+        # print("chromosome_length:\t", chromosome_length)
+
+        total_forward_alignment_length = 0
+        total_reverse_alignment_length = 0
 
         for data in read_data:
-            read_id, reversal_status, ref_alignment_start, alignment_length, read_length, contig_length, n_initial_clipped_bases, n_total_mismatches, n_total_deletes, n_total_inserts, identity = data
+            read_id, reversal_status, ref_alignment_start, ref_alignment_stop, alignment_length, read_length, contig_length, n_initial_clipped_bases, n_total_mismatches, n_total_deletes, n_total_inserts, identity = data
             print()
             print(read_id)
             print("reversed:\t", reversal_status)
             print("alignment_start:\t", ref_alignment_start)
+            print("alignment_stop:\t\t", ref_alignment_stop)
             print("alignment_length:\t", alignment_length)
             print("read_length:\t\t", read_length)
             print("n_initial_clipped_bases:", n_initial_clipped_bases)
@@ -447,11 +461,22 @@ def process_bam(bam_path, reference_path, output_dir=None):
             print("n_total_inserts:\t", n_total_inserts)
             print("identity:\t", identity)
 
+            if not reversal_status:
+                total_forward_alignment_length += alignment_length
+            else:
+                total_reverse_alignment_length += alignment_length
+
         total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
         total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
         total_identity = total_weighted_identity/total_alignment_bases
 
         print("\nTOTAL IDENTITY:\t", total_identity)
+
+        print("\nTOTAL FORWARD ALIGNMENT LENGTH:\t", total_forward_alignment_length)
+        print("ROUGH FORWARD COVERAGE ESTIMATE:\t", total_forward_alignment_length/chromosome_length)
+
+        print("\nTOTAL REVERSE ALIGNMENT LENGTH:\t", total_reverse_alignment_length)
+        print("ROUGH REVERSE COVERAGE ESTIMATE:\t", total_reverse_alignment_length/chromosome_length)
 
         plot_contigs(output_dir=output_dir,
                      read_data=read_data,
@@ -459,9 +484,9 @@ def process_bam(bam_path, reference_path, output_dir=None):
                      chromosome_length=chromosome_length,
                      total_identity=total_identity,
                      bam_path=bam_path,
-                     y_min=-1,
-                     y_max=4,
-                     show=False)
+                     # y_min=-8,
+                     # y_max=8,
+                     show=True)
 
 
 def main(bam_path, reference_path, output_dir):

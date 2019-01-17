@@ -12,7 +12,7 @@ def main(reads_file_path, true_ref_sequence_path=None, output_dir=None, n_passes
         FileManager.ensure_directory_exists(output_dir)
 
     assembly_sequence_path = assemble_wtdbg2(output_dir=output_dir,
-                                                 input_file_path=reads_file_path)
+                                             input_file_path=reads_file_path)
 
     reads_vs_ref_sam_path, reads_vs_ref_bam_path = align_minimap(output_dir=output_dir,
                                                                          ref_sequence_path=assembly_sequence_path,
@@ -22,7 +22,7 @@ def main(reads_file_path, true_ref_sequence_path=None, output_dir=None, n_passes
     #                                               reads_file_path=reads_file_path,
     #                                               reads_vs_ref_sam_path=reads_vs_ref_sam_path,
     #                                               ref_sequence_path=assembly_sequence_path)
-    #
+
 
     if true_ref_sequence_path is not None:
         assembled_vs_true_ref_sam_path, assembled_vs_true_ref_bam_path = align_minimap(output_dir=output_dir,

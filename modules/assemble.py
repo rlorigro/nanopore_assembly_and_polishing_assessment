@@ -40,4 +40,5 @@ def assemble_wtdbg2(input_file_path, output_dir=None, max_threads=None):
 
     output_file_path = abspath(join(output_dir, output_filename))
 
+
     return output_file_path
