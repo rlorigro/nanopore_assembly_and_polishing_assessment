@@ -3,6 +3,7 @@ from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
 from matplotlib import pyplot, patches
 import argparse
+import csv
 import os
 
 '''
@@ -223,7 +224,7 @@ def parse_match(alignment_position, length, read_sequence, ref_sequence):
 
 def parse_cigar_tuple(cigar_code, length, alignment_position, read_sequence, ref_sequence):
     """
-    Parse through a cigar operation to find possible candidate variant positions in the read
+    Parse through a cigar operation to find mismatches, inserts, deletes
     :param cigar_code: Cigar operation code
     :param length: Length of the operation
     :param alignment_position: Alignment position corresponding to the reference
@@ -408,6 +409,82 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     return read_data
 
 
+def print_read_summaries(read_data, total_identity, chromosome_length):
+    total_forward_alignment_length = 0
+    total_reverse_alignment_length = 0
+
+    for data in read_data:
+        read_id, reversal_status, ref_alignment_start, ref_alignment_stop, alignment_length, read_length, contig_length, n_initial_clipped_bases, n_total_mismatches, n_total_deletes, n_total_inserts, identity = data
+        print()
+        print(read_id)
+        print("reversed:\t", reversal_status)
+        print("alignment_start:\t", ref_alignment_start)
+        print("alignment_stop:\t\t", ref_alignment_stop)
+        print("alignment_length:\t", alignment_length)
+        print("read_length:\t\t", read_length)
+        print("n_initial_clipped_bases:", n_initial_clipped_bases)
+        print("n_total_mismatches:\t", n_total_mismatches)
+        print("n_total_deletes:\t", n_total_deletes)
+        print("n_total_inserts:\t", n_total_inserts)
+        print("identity:\t", identity)
+
+        if not reversal_status:
+            total_forward_alignment_length += alignment_length
+        else:
+            total_reverse_alignment_length += alignment_length
+
+    print("\nTOTAL IDENTITY:\t", total_identity)
+
+    print("\nTOTAL FORWARD ALIGNMENT LENGTH:\t", total_forward_alignment_length)
+    print("ROUGH FORWARD COVERAGE ESTIMATE:\t", total_forward_alignment_length / chromosome_length)
+
+    print("\nTOTAL REVERSE ALIGNMENT LENGTH:\t", total_reverse_alignment_length)
+    print("ROUGH REVERSE COVERAGE ESTIMATE:\t", total_reverse_alignment_length / chromosome_length)
+
+
+def export_summaries_to_csv(read_data, total_identity, chromosome_length, output_dir, bam_path):
+    total_forward_alignment_length = 0
+    total_reverse_alignment_length = 0
+
+    csv_rows = list()
+    csv_rows.append(["contig_name"])
+    csv_rows.append(["reversal_status"])
+    csv_rows.append(["ref_alignment_start"])
+    csv_rows.append(["ref_alignment_stop"])
+    csv_rows.append(["alignment_length"])
+    csv_rows.append(["read_length"])
+    csv_rows.append(["contig_length"])
+    csv_rows.append(["n_initial_clipped_bases"])
+    csv_rows.append(["n_total_mismatches"])
+    csv_rows.append(["n_total_deletes"])
+    csv_rows.append(["n_total_inserts"])
+
+    for data in sorted(read_data, key=lambda x: x[REF_ALIGNMENT_START]):
+        for i in range(IDENTITY):
+            csv_rows[i].append(data[i])
+
+        if not data[REVERSAL_STATUS]:
+            total_forward_alignment_length += data[ALIGNMENT_LENGTH]
+        else:
+            total_reverse_alignment_length += data[ALIGNMENT_LENGTH]
+
+    csv_rows.append(["total_identity",total_identity])
+    csv_rows.append(["total_forward_alignment_length",total_forward_alignment_length])
+    csv_rows.append(["forward_coverage_estimate",total_forward_alignment_length / chromosome_length])
+    csv_rows.append(["total_reverse_alignment_length",total_reverse_alignment_length])
+    csv_rows.append(["reverse_coverage_estimate",total_reverse_alignment_length / chromosome_length])
+
+    filename = os.path.basename(bam_path)
+    filename_prefix = ".".join(filename.split(".")[:-1])
+    output_filename = "summary_" + filename_prefix + ".csv"
+    output_file_path = os.path.join(output_dir, output_filename)
+
+    with open(output_file_path, "w") as file:
+        writer = csv.writer(file)
+        for row in csv_rows:
+            writer.writerow(row)
+
+
 def process_bam(bam_path, reference_path, output_dir=None):
     """
     Find useful summary data from a bam that can be represented as a table of identities, and a plot of alignments
@@ -443,40 +520,19 @@ def process_bam(bam_path, reference_path, output_dir=None):
         # print("chromosome_name:\t", chromosome_name)
         # print("chromosome_length:\t", chromosome_length)
 
-        total_forward_alignment_length = 0
-        total_reverse_alignment_length = 0
-
-        for data in read_data:
-            read_id, reversal_status, ref_alignment_start, ref_alignment_stop, alignment_length, read_length, contig_length, n_initial_clipped_bases, n_total_mismatches, n_total_deletes, n_total_inserts, identity = data
-            print()
-            print(read_id)
-            print("reversed:\t", reversal_status)
-            print("alignment_start:\t", ref_alignment_start)
-            print("alignment_stop:\t\t", ref_alignment_stop)
-            print("alignment_length:\t", alignment_length)
-            print("read_length:\t\t", read_length)
-            print("n_initial_clipped_bases:", n_initial_clipped_bases)
-            print("n_total_mismatches:\t", n_total_mismatches)
-            print("n_total_deletes:\t", n_total_deletes)
-            print("n_total_inserts:\t", n_total_inserts)
-            print("identity:\t", identity)
-
-            if not reversal_status:
-                total_forward_alignment_length += alignment_length
-            else:
-                total_reverse_alignment_length += alignment_length
-
         total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
         total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
-        total_identity = total_weighted_identity/total_alignment_bases
+        total_identity = total_weighted_identity / total_alignment_bases
 
-        print("\nTOTAL IDENTITY:\t", total_identity)
+        print_read_summaries(read_data=read_data,
+                             total_identity=total_identity,
+                             chromosome_length=chromosome_length)
 
-        print("\nTOTAL FORWARD ALIGNMENT LENGTH:\t", total_forward_alignment_length)
-        print("ROUGH FORWARD COVERAGE ESTIMATE:\t", total_forward_alignment_length/chromosome_length)
-
-        print("\nTOTAL REVERSE ALIGNMENT LENGTH:\t", total_reverse_alignment_length)
-        print("ROUGH REVERSE COVERAGE ESTIMATE:\t", total_reverse_alignment_length/chromosome_length)
+        export_summaries_to_csv(read_data=read_data,
+                                total_identity=total_identity,
+                                chromosome_length=chromosome_length,
+                                output_dir=output_dir,
+                                bam_path=bam_path)
 
         plot_contigs(output_dir=output_dir,
                      read_data=read_data,
