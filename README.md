@@ -1,6 +1,19 @@
 # nanopore_assembly_and_polishing_assessment
 Automation of pipelines that depend on preexisting assembly, polishing, and alignment tools. Performance evaluation and visualization of assembly and polishing
 
+## Requirements
+
+- python3
+
+- pysam (using htslib >=1.7):
+  - ubuntu 16.04 - NOT working (htslib version not supported)
+  - ubuntu 18.04 - WORKING
+  - macOS - UNTESTED
+  
+- matplotlib
+
+- tkinter
+
 
 ## Examples
 
