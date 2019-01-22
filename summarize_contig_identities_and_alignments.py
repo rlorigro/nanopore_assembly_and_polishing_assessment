@@ -321,90 +321,91 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     read_data = list()
 
     for read in reads:
-        ref_alignment_start = read.reference_start
-        ref_alignment_stop = get_read_stop_position(read)
-        ref_length = ref_alignment_stop - ref_alignment_start
+        if read.mapping_quality > 0:
+            ref_alignment_start = read.reference_start
+            ref_alignment_stop = get_read_stop_position(read)
+            ref_length = ref_alignment_stop - ref_alignment_start
 
-        reversal_status = read.is_reverse
+            reversal_status = read.is_reverse
 
-        ref_sequence = fasta_handler.get_sequence(chromosome_name=chromosome_name,
-                                                  start=ref_alignment_start,
-                                                  stop=ref_alignment_stop + 10)
+            ref_sequence = fasta_handler.get_sequence(chromosome_name=chromosome_name,
+                                                      start=ref_alignment_start,
+                                                      stop=ref_alignment_stop + 10)
 
-        cigar_tuples = read.cigartuples
-        read_sequence = read.query_sequence
-        read_length = len(read_sequence)
-        contig_length = read.infer_read_length()
+            cigar_tuples = read.cigartuples
+            read_sequence = read.query_sequence
+            read_length = len(read_sequence)
+            contig_length = read.infer_read_length()
 
-        read_id = read.query_name
-        # read_quality = read.query_qualities
+            read_id = read.query_name
+            # read_quality = read.query_qualities
 
-        # read_index: index of read sequence
-        # ref_index: index of reference sequence
-        read_index = 0
-        ref_index = 0
-        found_valid_cigar = False
+            # read_index: index of read sequence
+            # ref_index: index of reference sequence
+            read_index = 0
+            ref_index = 0
+            found_valid_cigar = False
 
-        n_total_mismatches = 0
-        n_total_deletes = 0
-        n_total_inserts = 0
+            n_total_mismatches = 0
+            n_total_deletes = 0
+            n_total_inserts = 0
 
-        n_initial_clipped_bases = 0
+            n_initial_clipped_bases = 0
 
-        for c, cigar in enumerate(cigar_tuples):
-            cigar_code = cigar[0]
-            length = cigar[1]
+            for c, cigar in enumerate(cigar_tuples):
+                cigar_code = cigar[0]
+                length = cigar[1]
 
-            # get the sequence segments that are effected by this operation
-            read_sequence_segment = read_sequence[read_index:read_index + length]
-            ref_sequence_segment = ref_sequence[ref_index:ref_index+length]
+                # get the sequence segments that are effected by this operation
+                read_sequence_segment = read_sequence[read_index:read_index + length]
+                ref_sequence_segment = ref_sequence[ref_index:ref_index+length]
 
-            # skip parsing the first segment if it is not a match
-            if cigar_code != 0 and found_valid_cigar is False:
-                # only increment the read index if the non-match cigar code is INS or SOFTCLIP
-                if cigar_code == 1 or cigar_code == 4:
-                    read_index += length
-                if cigar_code == 5 or cigar_code == 4:
-                    n_initial_clipped_bases = length
-                continue
+                # skip parsing the first segment if it is not a match
+                if cigar_code != 0 and found_valid_cigar is False:
+                    # only increment the read index if the non-match cigar code is INS or SOFTCLIP
+                    if cigar_code == 1 or cigar_code == 4:
+                        read_index += length
+                    if cigar_code == 5 or cigar_code == 4:
+                        n_initial_clipped_bases = length
+                    continue
 
-            found_valid_cigar = True
+                found_valid_cigar = True
 
-            # send the cigar tuple to get attributes we got by this operation
-            ref_index_increment, read_index_increment, n_mismatches, n_deletes, n_inserts = \
-                parse_cigar_tuple(cigar_code=cigar_code,
-                                  length=length,
-                                  alignment_position=ref_alignment_start + ref_index,
-                                  read_sequence=read_sequence_segment,
-                                  ref_sequence=ref_sequence_segment)
+                # send the cigar tuple to get attributes we got by this operation
+                ref_index_increment, read_index_increment, n_mismatches, n_deletes, n_inserts = \
+                    parse_cigar_tuple(cigar_code=cigar_code,
+                                      length=length,
+                                      alignment_position=ref_alignment_start + ref_index,
+                                      read_sequence=read_sequence_segment,
+                                      ref_sequence=ref_sequence_segment)
 
-            # increase the read index iterator
-            read_index += read_index_increment
-            ref_index += ref_index_increment
-            n_total_mismatches += n_mismatches
-            n_total_deletes += n_deletes
-            n_total_inserts += n_inserts
+                # increase the read index iterator
+                read_index += read_index_increment
+                ref_index += ref_index_increment
+                n_total_mismatches += n_mismatches
+                n_total_deletes += n_deletes
+                n_total_inserts += n_inserts
 
-        # total_non_matches = n_total_mismatches + n_total_deletes + n_total_inserts
-        total_non_matches = 2*n_total_mismatches + n_total_deletes + n_total_inserts
+            # total_non_matches = n_total_mismatches + n_total_deletes + n_total_inserts
+            total_non_matches = 2*n_total_mismatches + n_total_deletes + n_total_inserts
 
-        # identity = (ref_length - total_non_matches) / ref_length
-        identity = (ref_length + read_length - total_non_matches) / (ref_length + read_length)
+            # identity = (ref_length - total_non_matches) / ref_length
+            identity = (ref_length + read_length - total_non_matches) / (ref_length + read_length)
 
-        data = [read_id,
-                reversal_status,
-                ref_alignment_start,
-                ref_alignment_stop,
-                ref_length,
-                read_length,
-                contig_length,
-                n_initial_clipped_bases,
-                n_total_mismatches,
-                n_total_deletes,
-                n_total_inserts,
-                identity]
+            data = [read_id,
+                    reversal_status,
+                    ref_alignment_start,
+                    ref_alignment_stop,
+                    ref_length,
+                    read_length,
+                    contig_length,
+                    n_initial_clipped_bases,
+                    n_total_mismatches,
+                    n_total_deletes,
+                    n_total_inserts,
+                    identity]
 
-        read_data.append(data)
+            read_data.append(data)
 
     return read_data
 
