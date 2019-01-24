@@ -18,21 +18,10 @@ def main(reads_file_path, true_ref_sequence_path=None, output_dir=None, n_passes
                                                                          ref_sequence_path=assembly_sequence_path,
                                                                          reads_sequence_path=reads_file_path)
 
-    # polished_ref_sequence_path = polish_racon(output_dir=output_dir,
-    #                                               reads_file_path=reads_file_path,
-    #                                               reads_vs_ref_sam_path=reads_vs_ref_sam_path,
-    #                                               ref_sequence_path=assembly_sequence_path)
-
-
     if true_ref_sequence_path is not None:
         assembled_vs_true_ref_sam_path, assembled_vs_true_ref_bam_path = align_minimap(output_dir=output_dir,
                                                            ref_sequence_path=true_ref_sequence_path,
                                                            reads_sequence_path=assembly_sequence_path)
-
-
-        # polished_vs_true_ref_sam_path, polished_vs_true_ref_bam_path = align_minimap(output_dir=output_dir,
-        #                                                   ref_sequence_path=true_ref_sequence_path,
-        #                                                   reads_sequence_path=polished_ref_sequence_path)
 
     polished_ref_paths = list()
 
