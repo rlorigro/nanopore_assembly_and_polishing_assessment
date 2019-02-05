@@ -5,6 +5,7 @@ from matplotlib import pyplot, patches
 import argparse
 import csv
 import os
+pyplot.switch_backend('agg')
 
 '''
 Generate stats/plots on contig identity and alignment given a BAM of contigs VS true reference
