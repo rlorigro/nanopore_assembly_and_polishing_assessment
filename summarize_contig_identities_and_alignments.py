@@ -603,6 +603,9 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
         else:
             total_reverse_alignment_length += data[ALIGNMENT_LENGTH]
 
+    # Transpose
+    csv_rows = list(map(list, zip(*csv_rows)))
+
     csv_rows.append(["total_identity",total_identity])
     csv_rows.append(["total_forward_alignment_length",total_forward_alignment_length])
     csv_rows.append(["forward_coverage_estimate",total_forward_alignment_length / chromosome_length])
@@ -654,7 +657,8 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
 
         total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
         total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
-        total_identity = total_weighted_identity / total_alignment_bases
+        total_identity = total_weighted_identity / max(1e-9, total_alignment_bases)
+        total_identity = round(total_identity, 6)
 
         print_read_summaries(read_data=read_data,
                              total_identity=total_identity,
