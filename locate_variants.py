@@ -12,18 +12,50 @@ Generate stats/plots on contig identity and alignment given a BAM of contigs VS 
 
 
 # headers and indexes for indel data vectors
-DATA_INDEXES = {"chromosome_name":0,
-                "cigar_type":1,
-                "ref_start":2,
-                "ref_stop":3,
-                "ref_allele":4,
-                "read_start":5,
-                "read_stop":6,
-                "read_allele":7,
-                "reversal_status":8}
+DATA_INDEXES = {"chromosome_name": 0,
+                "cigar_type": 1,
+                "ref_start": 2,
+                "ref_stop": 3,
+                "ref_allele": 4,
+                "read_start": 5,
+                "read_stop": 6,
+                "read_allele": 7,
+                "reversal_status": 8}
 
 
-def parse_cigar_tuple(cigar_code, length, alignment_position, read_sequence, ref_sequence):
+MISMATCH_INDEXES = {"ref_allele": 0,
+                    "read_allele": 1,
+                    "ref_start": 2,
+                    "ref_stop": 3,
+                    "read_start": 4,
+                    "read_stop": 5}
+
+
+def parse_match(ref_index, read_index, length, read_sequence, ref_sequence):
+    """
+    Process a cigar operation that is a match
+    :param alignment_position: Position where this match happened
+    :param read_sequence: Read sequence
+    :param ref_sequence: Reference sequence
+    :param length: Length of the operation
+    :return:
+    This method updates the candidates dictionary.
+    """
+    n_mismatches = 0
+    mismatches = list()
+    for i in range(0, length):
+        allele = read_sequence[i]
+        ref = ref_sequence[i]
+
+        if allele != ref:
+            # mismatch
+            n_mismatches += 1
+            mismatches.append([ref, allele, ref_index+i, ref_index+i+1, read_index+i, read_index+i+1])
+
+    return n_mismatches, mismatches
+
+
+def parse_cigar_tuple(cigar_code, length, ref_index, read_index, read_sequence, ref_sequence):
     """
     Parse through a cigar operation to find mismatches, inserts, deletes
     :param cigar_code: Cigar operation code
@@ -44,6 +76,8 @@ def parse_cigar_tuple(cigar_code, length, alignment_position, read_sequence, ref
     ref_index_increment = length
     read_index_increment = length
 
+    mismatches = list()
+
     n_mismatches = 0
     n_deletes = 0
     n_inserts = 0
@@ -51,7 +85,11 @@ def parse_cigar_tuple(cigar_code, length, alignment_position, read_sequence, ref
     # deal different kinds of operations
     if cigar_code == 0:
         # match
-        pass
+        n_mismatches, mismatches = parse_match(ref_index=ref_index,
+                                               read_index=read_index,
+                                               length=length,
+                                               read_sequence=read_sequence,
+                                               ref_sequence=ref_sequence)
 
     elif cigar_code == 1:
         # insert
@@ -80,7 +118,7 @@ def parse_cigar_tuple(cigar_code, length, alignment_position, read_sequence, ref
     else:
         raise ("INVALID CIGAR CODE: %s" % cigar_code)
 
-    return ref_index_increment, read_index_increment, n_mismatches, n_deletes, n_inserts
+    return ref_index_increment, read_index_increment, n_mismatches, n_deletes, n_inserts, mismatches
 
 
 def get_read_stop_position(read):
@@ -118,6 +156,7 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     """
     inserts = defaultdict(list)
     deletes = defaultdict(list)
+    mismatches = defaultdict(list)
 
     n_secondary = 0
 
@@ -176,14 +215,32 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                 found_valid_cigar = True
 
                 # send the cigar tuple to get attributes we got by this operation
-                ref_index_increment, read_index_increment, n_mismatches, n_deletes, n_inserts = \
+                ref_index_increment, read_index_increment, n_mismatches, n_deletes, n_inserts, segment_mismatches = \
                     parse_cigar_tuple(cigar_code=cigar_code,
                                       length=length,
-                                      alignment_position=ref_alignment_start + ref_index,
+                                      ref_index=ref_index,
+                                      read_index=read_index,
                                       read_sequence=read_sequence_segment,
                                       ref_sequence=ref_sequence_segment)
 
-                if cigar_code == 1:
+                if cigar_code == 0:
+                    for mismatch in segment_mismatches:
+                        # mismatch
+                        cigar_type = "SNP"
+
+                        ref_start = ref_alignment_start + mismatch[MISMATCH_INDEXES["ref_start"]]
+                        ref_stop = ref_alignment_start + mismatch[MISMATCH_INDEXES["ref_stop"]]
+                        read_start = mismatch[MISMATCH_INDEXES["read_start"]]
+                        read_stop = mismatch[MISMATCH_INDEXES["read_stop"]]
+
+                        ref_allele = mismatch[MISMATCH_INDEXES["ref_allele"]]
+                        read_allele = mismatch[MISMATCH_INDEXES["read_allele"]]
+
+                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+
+                        mismatches[read_id].append(data)
+
+                elif cigar_code == 1:
                     # insert
                     cigar_type = "INS"
 
@@ -222,18 +279,18 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                 n_total_deletes += n_deletes
                 n_total_inserts += n_inserts
 
-    return inserts, deletes
+    return inserts, deletes, mismatches
 
 
-def merge_inserts_and_deletes(inserts, deletes):
+def merge_variants(inserts, deletes, mismatches):
     """
     :param inserts: dictionary of read_id:[coord1, coord2, ...]
     :param deletes: dictionary of read_id:[coord1, coord2, ...]
     :return:
     """
-    keys = set(inserts.keys()) | set(deletes.keys())    # union of insert and delete read IDs
+    keys = set(inserts.keys()) | set(deletes.keys() | set(mismatches.keys()))    # union of insert and delete read IDs
 
-    indels = dict()
+    variants = dict()
     for key in keys:
         if key in inserts:
             read_inserts = inserts[key]
@@ -245,12 +302,17 @@ def merge_inserts_and_deletes(inserts, deletes):
         else:
             read_deletes = list()
 
-        read_indels = read_deletes + read_inserts
-        read_indels = sorted(read_indels, key=lambda x: x[0])   # Sort by start pos
+        if key in mismatches:
+            read_mismatches = mismatches[key]
+        else:
+            read_mismatches = list()
 
-        indels[key] = read_indels
+        read_variants = read_deletes + read_inserts + read_mismatches
+        read_variants = sorted(read_variants, key=lambda x: x[DATA_INDEXES["ref_start"]])   # Sort by start pos
 
-    return indels
+        variants[key] = read_variants
+
+    return variants
 
 
 def write_hashed_lists_to_csv(data, output_path):
@@ -272,19 +334,26 @@ def write_hashed_lists_to_csv(data, output_path):
     return
 
 
-def export_indels_to_csv(output_dir, chromosome_name, inserts, deletes, merge=True):
+def export_variants_to_csv(output_dir, chromosome_name, mismatches, inserts, deletes, merge=True):
     if merge:
         # Make one output only (combine inserts and deletes)
-        indels = merge_inserts_and_deletes(inserts=inserts, deletes=deletes)
+        indels = merge_variants(mismatches=mismatches, inserts=inserts, deletes=deletes)
 
         # Prepare file paths
-        filename = "indels_" + chromosome_name + ".csv"
+        filename = "variants_" + chromosome_name + ".csv"
         output_path = os.path.join(output_dir, filename)
-        print("Saving deletes: %s" % output_path)
+        print("Saving variants: %s" % output_path)
 
         write_hashed_lists_to_csv(data=indels, output_path=output_path)
 
     else:
+        # Prepare file paths
+        filename = "mismatches_" + chromosome_name + ".csv"
+        output_path = os.path.join(output_dir, filename)
+        print("Saving mismatches: %s" % output_path)
+
+        write_hashed_lists_to_csv(data=mismatches, output_path=output_path)
+
         # Prepare file paths
         filename = "deletes_" + chromosome_name + ".csv"
         output_path = os.path.join(output_dir, filename)
@@ -311,11 +380,11 @@ def process_bam(bam_path, reference_path, output_dir=None):
     print("\n" + bam_path)
 
     if output_dir is None:
-        output_dir = "indels/"
+        output_dir = "variants/"
 
     # Make a subdirectory to contain everything
     datetime_string = FileManager.get_datetime_string()
-    output_subdirectory = "indels_" + datetime_string
+    output_subdirectory = "variants_" + datetime_string
     output_dir = os.path.join(output_dir, output_subdirectory)
     FileManager.ensure_directory_exists(output_dir)
 
@@ -334,13 +403,14 @@ def process_bam(bam_path, reference_path, output_dir=None):
 
         reads = bam_handler.get_reads(chromosome_name=chromosome_name, start=start, stop=stop)
 
-        inserts, deletes = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
+        inserts, deletes, mismatches = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
 
-        export_indels_to_csv(output_dir=output_dir,
-                             chromosome_name=chromosome_name,
-                             inserts=inserts,
-                             deletes=deletes,
-                             merge=False)
+        export_variants_to_csv(output_dir=output_dir,
+                               chromosome_name=chromosome_name,
+                               mismatches=mismatches,
+                               inserts=inserts,
+                               deletes=deletes,
+                               merge=True)
 
 
 def main(bam_path, reference_path, output_dir):
@@ -348,6 +418,7 @@ def main(bam_path, reference_path, output_dir):
     process_bam(bam_path=bam_path,
                 reference_path=reference_path,
                 output_dir=output_dir)
+
 
 if __name__ == "__main__":
     '''
