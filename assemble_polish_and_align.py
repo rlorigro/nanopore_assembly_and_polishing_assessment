@@ -1,19 +1,27 @@
 from modules.align import *
+from modules.assemble import *
 from modules.polish import *
 from handlers.FileManager import FileManager
 import argparse
 
 
-def polish(reads_file_path, assembly_sequence_path, true_ref_sequence_path=None, output_dir=None, n_passes=False):
+def main(reads_file_path, true_ref_sequence_path=None, output_dir=None, n_passes=False):
     if output_dir is None:
         output_dir = "./"
     else:
         FileManager.ensure_directory_exists(output_dir)
 
+    assembly_sequence_path = assemble_wtdbg2(output_dir=output_dir,
+                                             input_file_path=reads_file_path)
+
+    reads_vs_ref_sam_path, reads_vs_ref_bam_path = align_minimap(output_dir=output_dir,
+                                                                         ref_sequence_path=assembly_sequence_path,
+                                                                         reads_sequence_path=reads_file_path)
+
     if true_ref_sequence_path is not None:
         assembled_vs_true_ref_sam_path, assembled_vs_true_ref_bam_path = align_minimap(output_dir=output_dir,
-                                                                                       ref_sequence_path=true_ref_sequence_path,
-                                                                                       reads_sequence_path=assembly_sequence_path)
+                                                           ref_sequence_path=true_ref_sequence_path,
+                                                           reads_sequence_path=assembly_sequence_path)
 
     polished_ref_paths = list()
 
@@ -27,18 +35,15 @@ def polish(reads_file_path, assembly_sequence_path, true_ref_sequence_path=None,
         else:
             ref_sequence_path = polished_ref_paths[i-1]
 
-        reads_vs_polished_ref_sam_path = align_minimap(output_dir=polish_output_dir,
-                                                       ref_sequence_path=ref_sequence_path,
-                                                       reads_sequence_path=reads_file_path,
-                                                       sam_only=True)
+        reads_vs_polished_ref_sam_path, reads_vs_polished_ref_bam_path = align_minimap(output_dir=polish_output_dir,
+                                                                                       ref_sequence_path=ref_sequence_path,
+                                                                                       reads_sequence_path=reads_file_path)
 
         repolished_ref_sequence_path = polish_racon(output_dir=polish_output_dir,
                                                     reads_file_path=reads_file_path,
                                                     reads_vs_ref_sam_path=reads_vs_polished_ref_sam_path,
                                                     ref_sequence_path=ref_sequence_path,
                                                     suffix=suffix)
-
-        remove(reads_vs_polished_ref_sam_path)  # delete last sam
 
         polished_ref_paths.append(repolished_ref_sequence_path)
 
@@ -55,22 +60,16 @@ if __name__ == "__main__":
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--contigs",
-        type=str,
-        required=True,
-        help="FASTA file path of contigs to be polished"
-    )
-    parser.add_argument(
         "--sequences",
         type=str,
         required=True,
-        help="file path of FASTQ or FASTA sequence file containing reads"
+        help="file path of FASTQ or FASTA sequence file"
     )
     parser.add_argument(
         "--true_ref",
         type=str,
         required=False,
-        help="FASTA file path of true reference to be compared against for QC"
+        help="FASTA file path of true reference to be compared against"
     )
     parser.add_argument(
         "--output_dir",
@@ -88,4 +87,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    polish(args.sequences, args.contigs, true_ref_sequence_path=args.true_ref, output_dir=args.output_dir, n_passes=args.n_passes)
+    main(args.sequences, true_ref_sequence_path=args.true_ref, output_dir=args.output_dir, n_passes=args.n_passes)

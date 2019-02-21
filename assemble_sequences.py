@@ -18,10 +18,6 @@ def main(reads_file_path, genome_size=None, output_dir=None):
                                              input_file_path=reads_file_path,
                                              genome_size=genome_size)
 
-    reads_vs_ref_sam_path, reads_vs_ref_bam_path = align_minimap(output_dir=output_dir,
-                                                                 ref_sequence_path=assembly_sequence_path,
-                                                                 reads_sequence_path=reads_file_path)
-
 
 if __name__ == "__main__":
     '''

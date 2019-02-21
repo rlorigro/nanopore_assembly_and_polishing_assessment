@@ -26,7 +26,76 @@ N_TOTAL_INSERTS = 10
 IDENTITY = 11
 
 
-def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, alignment_length, scale, color, contig_length):
+def read_centromere_table(centromere_table_path, target_chromosome_name):
+    """
+    Read tsv file describing centromere locations with format convention:
+        #bin	chrom	chromStart	chromEnd	name
+        23	    chr1	122503247	124785432	GJ212202.1
+        ...
+
+    :param centromere_table_path:
+    :param chromosome_name:
+    :return:
+    """
+    centromere_coordinates = list()
+
+    with open(centromere_table_path, "r") as file:
+        for l,line in enumerate(file):
+            if l == 0:
+                continue
+            if line.isspace():
+                continue
+
+            line = line.strip().split("\t")
+            _, chromosome_name, start, end, event = line
+
+            start = int(start)
+            end = int(end)
+
+            if chromosome_name == target_chromosome_name:
+                centromere_coordinates.append([start,end])
+
+    return centromere_coordinates
+
+
+def read_gap_table(table_path, target_chromosome_name, size_cutoff=0):
+    """
+    Read tsv file describing gap locations with format convention:
+        #bin	chrom	chromStart	chromEnd	...
+        23	    chr1	122503247	124785432	...
+        ...
+
+    :param table_path:
+    :param target_chromosome_name:
+    :return:
+    """
+    coordinates = list()
+
+    with open(table_path, "r") as file:
+        for l,line in enumerate(file):
+            if l == 0:
+                continue
+            if line.isspace():
+                continue
+
+            line = line.strip().split("\t")
+            chromosome_name = line[1]
+            start = line[2]
+            end = line[3]
+            type = line[-2]
+
+            start = int(start)
+            end = int(end)
+            size = end - start
+
+            if chromosome_name == target_chromosome_name:
+                if size > size_cutoff:
+                    coordinates.append([start,end])
+
+    return coordinates
+
+
+def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, alignment_length, scale, color, contig_length, ):
     """
     Given relevant data about a contig, generate a plot showing how it aligns to the chromosome
     :param axes:
@@ -65,7 +134,34 @@ def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, al
     axes.add_patch(rect)
 
 
-def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, total_identity, bam_path, y_min=None, y_max=None, save=True, show=False):
+def plot_windows(figure, axes, coordinates, scale, y_min, y_max, color):
+    """
+    add a vertical patch to the plot showing where the centromere falls (supposedly, according to UCSC table browser)
+    :param figure:
+    :param axes:
+    :param centromere_coordinates:
+    :param scale:
+    :param y_min:
+    :param y_max:
+    :return:
+    """
+
+    for coordinate in coordinates:
+        x_min, x_max = coordinate
+
+        x_min = x_min/scale
+        x_max = x_max/scale
+
+        width = x_max - x_min
+        height = y_max - y_min
+
+        rect = patches.Rectangle((x_min, y_min), width, height, color=color, zorder=0)
+        axes.add_patch(rect)
+
+
+def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, total_identity, bam_path,
+                 centromere_coordinates, gap_coordinates, segdup_coordinates, y_min=None, y_max=None,
+                 save=True, show=False):
     """
     Create a figure showing how contigs align to the reference chromosome and what their identities are
     :param output_dir: where to save figures
@@ -85,13 +181,13 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
 
     read_data = sorted(read_data, key=lambda x: x[REF_ALIGNMENT_START])
 
-    left_column_offset = -6
-    column_width = 3
-
     scale = 1000000
 
     if chromosome_length < scale:
         scale = chromosome_length
+
+    left_column_offset = -0.5*chromosome_length/scale
+    column_width = 0.5*chromosome_length/scale
 
     # ---- plot reference chromosome and REF text legend ----
 
@@ -137,7 +233,7 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
 
         # ---- plot divider lines and text data ----
 
-        axes.axhline(y + 0.33, linestyle="--", linewidth=0.6)
+        # axes.axhline(y + 0.33, linestyle="--", linewidth=0.6)
 
         x = -(chromosome_length/scale) + left_column_offset
         pyplot.text(x, y, read_id)
@@ -147,8 +243,8 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
 
     # ---- plot leftover divider lines ----
 
-    axes.axhline(-(n_reverse+1)/2 + 0.33, linestyle="--", linewidth=0.6)
-    axes.axhline(0 + 0.33, linestyle="--", linewidth=0.6)
+    # axes.axhline(-(n_reverse+1)/2 + 0.33, linestyle="--", linewidth=0.6)
+    # axes.axhline(0 + 0.33, linestyle="--", linewidth=0.6)
 
     # ---- find limits for axes ----
 
@@ -182,8 +278,35 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
 
     pyplot.title("Chromosome: "+chromosome_name)
 
+    if centromere_coordinates is not None:
+        plot_windows(figure=figure,
+                     axes=axes,
+                     coordinates=centromere_coordinates,
+                     scale=scale,
+                     y_min=y_min,
+                     y_max=y_max,
+                     color=[0.9, 0.9, 0.9])
+
+    if gap_coordinates is not None:
+        plot_windows(figure=figure,
+                     axes=axes,
+                     coordinates=gap_coordinates,
+                     scale=scale,
+                     y_min=y_min,
+                     y_max=y_max,
+                     color=[0.7, 0.9, 0.7])
+
+    if segdup_coordinates is not None:
+        plot_windows(figure=figure,
+                     axes=axes,
+                     coordinates=segdup_coordinates,
+                     scale=scale,
+                     y_min=y_min,
+                     y_max=y_max,
+                     color=[0.9, 0.7, 0.7])
+
     if save:
-        filename = os.path.basename(bam_path)
+        filename = os.path.basename(bam_path+"_"+chromosome_name)
         filename_prefix = ".".join(filename.split(".")[:-1])
         output_filename = filename_prefix + ".png"
         output_file_path = os.path.join(output_dir, output_filename)
@@ -194,6 +317,8 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
     if show:
         pyplot.show()
         pyplot.close()
+
+    return figure, axes
 
 
 def parse_match(alignment_position, length, read_sequence, ref_sequence):
@@ -321,8 +446,14 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     """
     read_data = list()
 
+    n_secondary = 0
+
     for read in reads:
-        if read.mapping_quality > 0:
+        if read.is_secondary:
+            n_secondary += 1
+            print(read.query_name, n_secondary)
+
+        if read.mapping_quality > 0 and not read.is_secondary:
             ref_alignment_start = read.reference_start
             ref_alignment_stop = get_read_stop_position(read)
             ref_length = ref_alignment_stop - ref_alignment_start
@@ -411,7 +542,10 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     return read_data
 
 
-def print_read_summaries(read_data, total_identity, chromosome_length):
+def print_read_summaries(read_data, total_identity, chromosome_name, chromosome_length):
+    print("chromosome_name:\t", chromosome_name)
+    print("chromosome_length:\t", chromosome_length)
+
     total_forward_alignment_length = 0
     total_reverse_alignment_length = 0
 
@@ -444,7 +578,7 @@ def print_read_summaries(read_data, total_identity, chromosome_length):
     print("ROUGH REVERSE COVERAGE ESTIMATE:\t", total_reverse_alignment_length / chromosome_length)
 
 
-def export_summaries_to_csv(read_data, total_identity, chromosome_length, output_dir, bam_path):
+def export_summaries_to_csv(read_data, total_identity, chromosome_length, output_dir, bam_path, chromosome_name):
     total_forward_alignment_length = 0
     total_reverse_alignment_length = 0
 
@@ -470,15 +604,19 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
         else:
             total_reverse_alignment_length += data[ALIGNMENT_LENGTH]
 
+    # Transpose
+    print(len(csv_rows), len(csv_rows[0]), len(csv_rows[-1]))
+    csv_rows = list(map(list, zip(*csv_rows)))
+
     csv_rows.append(["total_identity",total_identity])
     csv_rows.append(["total_forward_alignment_length",total_forward_alignment_length])
     csv_rows.append(["forward_coverage_estimate",total_forward_alignment_length / chromosome_length])
     csv_rows.append(["total_reverse_alignment_length",total_reverse_alignment_length])
     csv_rows.append(["reverse_coverage_estimate",total_reverse_alignment_length / chromosome_length])
 
-    filename = os.path.basename(bam_path)
+    filename = os.path.basename(bam_path+"_"+chromosome_name)
     filename_prefix = ".".join(filename.split(".")[:-1])
-    output_filename = "summary_" + filename_prefix + ".csv"
+    output_filename = "summary_" + filename_prefix + "_" + chromosome_name + ".csv"
     output_file_path = os.path.join(output_dir, output_filename)
 
     with open(output_file_path, "w") as file:
@@ -487,7 +625,7 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
             writer.writerow(row)
 
 
-def process_bam(bam_path, reference_path, output_dir=None):
+def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path=None, gap_table_path=None, segdup_table_path=None):
     """
     Find useful summary data from a bam that can be represented as a table of identities, and a plot of alignments
     :param bam_path: path to a bam containing contigs aligned to a true reference
@@ -519,42 +657,69 @@ def process_bam(bam_path, reference_path, output_dir=None):
 
         read_data = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
 
-        # print("chromosome_name:\t", chromosome_name)
-        # print("chromosome_length:\t", chromosome_length)
-
         total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
         total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
-        total_identity = total_weighted_identity / total_alignment_bases
+
+        # Calculate total identity, and approximate 0 if denominator is zero
+        total_identity = total_weighted_identity / max(1e-9, total_alignment_bases)
+        total_identity = round(total_identity, 6)
 
         print_read_summaries(read_data=read_data,
                              total_identity=total_identity,
+                             chromosome_name=chromosome_name,
                              chromosome_length=chromosome_length)
 
         export_summaries_to_csv(read_data=read_data,
                                 total_identity=total_identity,
                                 chromosome_length=chromosome_length,
                                 output_dir=output_dir,
-                                bam_path=bam_path)
+                                bam_path=bam_path,
+                                chromosome_name=chromosome_name)
 
-        plot_contigs(output_dir=output_dir,
-                     read_data=read_data,
-                     chromosome_name=chromosome_name,
-                     chromosome_length=chromosome_length,
-                     total_identity=total_identity,
-                     bam_path=bam_path,
-                     # y_min=-8,
-                     # y_max=8,
-                     show=True)
+        if centromere_table_path is not None:
+            centromere_coordinates = read_centromere_table(centromere_table_path=centromere_table_path,
+                                                           target_chromosome_name=chromosome_name)
+        else:
+            centromere_coordinates = None
+
+        if gap_table_path is not None:
+            gap_coordinates = read_gap_table(table_path=gap_table_path,
+                                             target_chromosome_name=chromosome_name)
+        else:
+            gap_coordinates = None
+
+        if segdup_table_path is not None:
+            segdup_coordinates = read_gap_table(table_path=segdup_table_path,
+                                                target_chromosome_name=chromosome_name,
+                                                size_cutoff=10000)
+        else:
+            segdup_coordinates = None
+
+        figure, axes = plot_contigs(output_dir=output_dir,
+                                    read_data=read_data,
+                                    chromosome_name=chromosome_name,
+                                    chromosome_length=chromosome_length,
+                                    total_identity=total_identity,
+                                    bam_path=bam_path,
+                                    centromere_coordinates=centromere_coordinates,
+                                    gap_coordinates=gap_coordinates,
+                                    segdup_coordinates=segdup_coordinates,
+                                    show=False)
 
 
-def main(bam_path, reference_path, output_dir):
+def main(bam_path, reference_path, output_dir, centromere_table_path, gap_table_path, segdup_table_path):
 
-    process_bam(bam_path=bam_path, reference_path=reference_path, output_dir=output_dir)
+    process_bam(bam_path=bam_path,
+                reference_path=reference_path,
+                output_dir=output_dir,
+                centromere_table_path=centromere_table_path,
+                gap_table_path=gap_table_path,
+                segdup_table_path=segdup_table_path)
 
 
 if __name__ == "__main__":
     '''
-    Processes arguments and performs tasks to generate the pileup.
+    Processes arguments
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -570,6 +735,24 @@ if __name__ == "__main__":
         help="FASTA file path of true reference to be compared against"
     )
     parser.add_argument(
+        "--centromeres",
+        type=str,
+        required=False,
+        help="UCSC table browser output for centromere locations"
+    )
+    parser.add_argument(
+        "--gap",
+        type=str,
+        required=False,
+        help="UCSC table browser output for gap locations"
+    )
+    parser.add_argument(
+        "--seg_dups",
+        type=str,
+        required=False,
+        help="UCSC table browser output for segmental duplication locations"
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         required=False,
@@ -578,4 +761,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(bam_path=args.bam, reference_path=args.ref, output_dir=args.output_dir)
+    main(bam_path=args.bam, reference_path=args.ref, output_dir=args.output_dir, centromere_table_path=args.centromeres,
+         gap_table_path=args.gap, segdup_table_path=args.seg_dups)

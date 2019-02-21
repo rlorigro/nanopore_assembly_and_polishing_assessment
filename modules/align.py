@@ -1,9 +1,10 @@
 from os.path import exists, dirname, basename, join, abspath
+from os import remove
 from multiprocessing import cpu_count
 from subprocess import run, PIPE
 
 
-def align_minimap(ref_sequence_path, reads_sequence_path, max_threads=None, output_dir=None):
+def align_minimap(ref_sequence_path, reads_sequence_path, max_threads=None, output_dir=None, preset="map-ont", sam_only=False):
     """
     Given a reference file and reads file align using minimap, generating a
     :param ref_sequence_path:
@@ -33,13 +34,19 @@ def align_minimap(ref_sequence_path, reads_sequence_path, max_threads=None, outp
     output_filename = output_filename_prefix + ".sam"
     output_file_path = join(output_dir, output_filename)
 
-    arguments = ["minimap2", "-a", "-t", max_threads, "-x", "map-ont", ref_sequence_path, reads_sequence_path]
+    arguments = ["minimap2", "-a", "-t", max_threads, "-x", preset, ref_sequence_path, reads_sequence_path]
 
     print("\nRUNNING: ", " ".join(arguments))
 
     with open(output_file_path, "w") as output_file:
         print("REDIRECTING TO: ", output_file_path, "\n")
         run(arguments, cwd=output_dir, stdout=output_file, check=True)
+
+    if sam_only:
+        print("||||||||||||||||||||||||||| SAM ONLY ||||||||||||||||||||||||||| ")
+        # end early if specified (for Racon)
+        output_sam_file_path = abspath(join(output_dir, output_filename_prefix + ".sam"))
+        return output_sam_file_path
 
     # ---- Sort SAM ----------
 

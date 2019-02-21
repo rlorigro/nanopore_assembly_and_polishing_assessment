@@ -3,7 +3,15 @@ from multiprocessing import cpu_count
 from subprocess import run, PIPE
 
 
-def assemble_wtdbg2(input_file_path, output_dir=None, max_threads=None):
+def assemble_wtdbg2(input_file_path, genome_size, output_dir=None, max_threads=None):
+    """
+    Wrapper for wtdbg2 assembly
+    :param input_file_path:
+    :param genome_size:
+    :param output_dir:
+    :param max_threads:
+    :return:
+    """
     if max_threads is None:
         max_threads = cpu_count() - 2
         max_threads = str(max_threads)
@@ -18,7 +26,7 @@ def assemble_wtdbg2(input_file_path, output_dir=None, max_threads=None):
     input_filename_prefix = "_".join(input_filename_prefix.split(".")[:-1])
     output_filename_prefix = "_".join(["assembled", "wtdbg2", input_filename_prefix])
 
-    arguments = ["wtdbg2", "-t", max_threads, "-x", "ont", "-i", input_file_path, "-o", output_filename_prefix]
+    arguments = ["wtdbg2", "-t", max_threads, "-x", "ont", "-L", "10000", "-g", genome_size, "-i", input_file_path, "-o", output_filename_prefix]
 
     print("output dir:\t%s" % output_dir)
     print("input:\t%s" % input_file_path)
@@ -39,6 +47,5 @@ def assemble_wtdbg2(input_file_path, output_dir=None, max_threads=None):
     run(arguments, cwd=output_dir)
 
     output_file_path = abspath(join(output_dir, output_filename))
-
 
     return output_file_path
