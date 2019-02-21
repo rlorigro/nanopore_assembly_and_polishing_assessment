@@ -10,11 +10,6 @@ def polish(reads_file_path, assembly_sequence_path, true_ref_sequence_path=None,
     else:
         FileManager.ensure_directory_exists(output_dir)
 
-    reads_vs_ref_sam_path = align_minimap(output_dir=output_dir,
-                                          ref_sequence_path=assembly_sequence_path,
-                                          reads_sequence_path=reads_file_path,
-                                          sam_only=True)
-
     if true_ref_sequence_path is not None:
         assembled_vs_true_ref_sam_path, assembled_vs_true_ref_bam_path = align_minimap(output_dir=output_dir,
                                                                                        ref_sequence_path=true_ref_sequence_path,
