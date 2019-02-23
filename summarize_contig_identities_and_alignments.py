@@ -624,6 +624,14 @@ def print_read_summaries(read_data, total_identity, chromosome_name, chromosome_
 def export_summaries_to_csv(read_data, total_identity, chromosome_length, output_dir, bam_path, chromosome_name):
     total_forward_alignment_length = 0
     total_reverse_alignment_length = 0
+    total_forward_matches = 0
+    total_reverse_matches = 0
+    total_forward_mismatches = 0
+    total_reverse_mismatches = 0
+    total_forward_inserts = 0
+    total_reverse_inserts = 0
+    total_forward_deletes = 0
+    total_reverse_deletes = 0
 
     csv_rows = list()
     csv_rows.append(["contig_name"])
@@ -645,12 +653,29 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
 
         if not data[REVERSAL_STATUS]:
             total_forward_alignment_length += data[ALIGNMENT_LENGTH]
+            total_forward_matches += data[N_MATCHES]
+            total_forward_mismatches += data[N_TOTAL_MISMATCHES]
+            total_forward_inserts += data[N_TOTAL_INSERTS]
+            total_forward_deletes += data[N_TOTAL_DELETES]
+
         else:
             total_reverse_alignment_length += data[ALIGNMENT_LENGTH]
+            total_reverse_matches += data[N_MATCHES]
+            total_reverse_mismatches += data[N_TOTAL_MISMATCHES]
+            total_reverse_inserts += data[N_TOTAL_INSERTS]
+            total_reverse_deletes += data[N_TOTAL_DELETES]
 
     # Transpose
     csv_rows = list(map(list, zip(*csv_rows)))
 
+    csv_rows.append(["total_reverse_matches",total_reverse_matches])
+    csv_rows.append(["total_reverse_mismatches",total_reverse_mismatches])
+    csv_rows.append(["total_reverse_inserts",total_reverse_inserts])
+    csv_rows.append(["total_reverse_deletes",total_reverse_deletes])
+    csv_rows.append(["total_forward_matches",total_forward_matches])
+    csv_rows.append(["total_forward_mismatches",total_forward_mismatches])
+    csv_rows.append(["total_forward_inserts",total_forward_inserts])
+    csv_rows.append(["total_forward_deletes",total_forward_deletes])
     csv_rows.append(["total_identity",total_identity])
     csv_rows.append(["total_forward_alignment_length",total_forward_alignment_length])
     csv_rows.append(["forward_coverage_estimate",total_forward_alignment_length / chromosome_length])
