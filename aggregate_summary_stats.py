@@ -1,5 +1,6 @@
 from handlers.FileManager import FileManager
 from matplotlib import pyplot
+from collections import defaultdict
 import argparse
 import numpy
 import csv
@@ -85,6 +86,8 @@ def aggregate_summary_data(summary_file_paths):
 
     identities = list()
 
+    global_summary_dict = defaultdict(int)
+
     for p,path in enumerate(summary_file_paths):
         filename = os.path.basename(path)
         chromosome_name = get_chromosome_name_from_path(path)
@@ -119,11 +122,27 @@ def aggregate_summary_data(summary_file_paths):
 
                     # Summary data (the good part)
                     file_summary_data.append(line[-1])
+                    global_summary_dict[line[0]] += int(float((line[-1].strip())))
 
         if summary_headers is None:
             summary_headers = file_summary_headers
 
         summary_data.append(file_summary_data)
+
+    # calculate global stats
+    g_n_matches = int(global_summary_dict['total_reverse_matches'] + global_summary_dict['total_forward_matches'])
+    g_n_mismatches = int(global_summary_dict['total_reverse_mismatches'] + global_summary_dict['total_forward_mismatches'])
+    g_n_deletes = int(global_summary_dict['total_reverse_deletes'] + global_summary_dict['total_forward_deletes'])
+    g_n_inserts = int(global_summary_dict['total_reverse_inserts'] + global_summary_dict['total_forward_inserts'])
+    g_identity = 1.0 * g_n_matches / (g_n_matches + g_n_mismatches + g_n_deletes + g_n_inserts)
+    global_summary_dict['total_identity'] = g_identity
+    global_summary_dict['forward_coverage_estimate'] = -1
+    global_summary_dict['reverse_coverage_estimate'] = -1
+
+    global_summary_data = ['genome', 'genome']
+    for k in summary_headers:
+        global_summary_data.append(global_summary_dict[k])
+    summary_data.append(global_summary_data)
 
     return summary_headers, summary_data, identities
 
@@ -197,7 +216,8 @@ def main(summary_dir, output_dir, filter_decoys):
 
     # ------------------
 
-    sample_name = None  # replace this with sample name extractor function?
+    sample_name = os.path.basename(summary_dir.rstrip('/'))  # replace this with sample name extractor function?
+    if sample_name == '': sample_name=None
 
     write_chromosomal_summary_data_to_csv(summary_headers=summary_headers,
                                           summary_data=summary_data,
