@@ -6,7 +6,7 @@ from multiprocessing import Pool
 import argparse
 
 '''
-Generate stats/plots on contig identity and alignment given a BAM of contigs VS true reference
+Generate stats on contig identity and alignment given a BAM of contigs VS true reference
 '''
 
 # read data indexes
@@ -50,14 +50,14 @@ def get_chromosome_stats(reference_path, chromosome_name, chromosome_length, sta
 
 def process_bam(bam_path, reference_path, max_threads, output_dir=None):
     """
-    Find useful summary data from a bam that can be represented as a table of identities, and a plot of alignments
+    Find useful summary data from a bam that can be represented as a table of identities/matches/mismatches/indels
     :param bam_path: path to a bam containing contigs aligned to a true reference
     :param reference_path: the true reference that contigs were aligned to
-    :param output_dir: where to save plots
+    :param output_dir: where to save stats
     :return:
     """
     if output_dir is None:
-        output_dir = "plots/"
+        output_dir = "stats/"
 
     FileManager.ensure_directory_exists(output_dir)
 

@@ -79,7 +79,7 @@ def main():
     bins = numpy.arange(0, max_length + step, step=step)
     frequencies, _ = numpy.histogram(lengths, bins=bins)
 
-    plot_length_distribution(lengths=lengths)
+    plot_length_distribution(step=step, bins=bins, frequencies=frequencies)
 
     # ---- Printing ----
 
