@@ -26,7 +26,7 @@ def main(assembly_dir):
     genome_size = 3.3 * 1000**3
 
     # assembly_dir = "/Users/saureous/data/nanopore/agbt/assemblies"
-    paths = FileManager.get_all_file_paths_by_type(parent_directory_path=assembly_dir, file_extension=".txt")
+    paths = FileManager.get_all_file_paths_by_type(parent_directory_path=assembly_dir, file_extension=".fasta")
 
     # print(paths)
     figure = pyplot.figure()
