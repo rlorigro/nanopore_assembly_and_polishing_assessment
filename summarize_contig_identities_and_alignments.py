@@ -693,6 +693,12 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
     csv_rows.append(["total_reverse_alignment_length",total_reverse_alignment_length])
     csv_rows.append(["reverse_coverage_estimate",total_reverse_alignment_length / chromosome_length])
 
+    total_forward_conventional_identity = total_forward_matches / (total_forward_matches + total_forward_mismatches + total_forward_inserts + total_forward_deletes)
+    total_reverse_conventional_identity = total_reverse_matches / (total_reverse_matches + total_reverse_mismatches + total_reverse_inserts + total_reverse_deletes)
+
+    csv_rows.append(["total_forward_conventional_identity", total_forward_conventional_identity])
+    csv_rows.append(["total_reverse_conventional_identity", total_reverse_conventional_identity])
+
     filename = os.path.basename(bam_path+"_"+chromosome_name)
     filename_prefix = ".".join(filename.split(".")[:-1])
     output_filename = "summary_" + filename_prefix + "_" + chromosome_name + ".csv"
