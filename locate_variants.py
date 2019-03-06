@@ -14,8 +14,8 @@ Generate stats/plots on contig identity and alignment given a BAM of contigs VS 
 
 
 # headers and indexes for indel data vectors
-DATA_INDEXES = {"chromosome_name": 0,
-                "sequence_name": 1,
+DATA_INDEXES = {"sequence_name": 0,
+                "chromosome_name": 1,
                 "cigar_type": 2,
                 "ref_start": 3,
                 "ref_stop": 4,
@@ -172,7 +172,7 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
     for read in reads:
         if read.is_secondary:
             n_secondary += 1
-            print(read.query_name, n_secondary)
+            # print(read.query_name, n_secondary)
 
         if read.mapping_quality > 0 and not read.is_secondary:
             ref_alignment_start = read.reference_start
@@ -248,6 +248,9 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                         left_index = mismatch[MISMATCH_INDEXES["ref_start"]] - left_pad
                         right_index = mismatch[MISMATCH_INDEXES["ref_start"]] + right_pad
 
+                        left_index = max(0, left_index)
+                        right_index = min(len(ref_sequence), right_index)
+
                         ref_window = ref_sequence[left_index:right_index]
 
                         entropy = round(calculate_shannon_entropy(ref_window),3)
@@ -270,7 +273,10 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     read_allele = read_sequence[read_start:read_stop]
                     ref_allele = ref_sequence[ref_start:ref_stop]
 
-                    ref_window = ref_sequence[ref_index-left_pad:ref_index+right_pad]
+                    left_index = max(0, ref_index - left_pad)
+                    right_index = min(len(ref_sequence), ref_index + right_pad)
+
+                    ref_window = ref_sequence[left_index:right_index]
 
                     entropy = round(calculate_shannon_entropy(ref_window), 3)
                     max_repeat = find_longest_repeat(ref_window)
@@ -293,7 +299,10 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     read_allele = read_sequence[read_start:read_stop]
                     ref_allele = ref_sequence[ref_start:ref_stop]
 
-                    ref_window = ref_sequence[ref_index-left_pad:ref_index+right_pad]
+                    left_index = max(0, ref_index - left_pad)
+                    right_index = min(len(ref_sequence), ref_index + right_pad)
+
+                    ref_window = ref_sequence[left_index:right_index]
 
                     entropy = round(calculate_shannon_entropy(ref_window), 3)
                     max_repeat = find_longest_repeat(ref_window)
