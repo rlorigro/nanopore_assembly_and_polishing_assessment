@@ -1,4 +1,5 @@
 from modules.entropy import calculate_shannon_entropy, find_longest_repeat
+from modules.sort import sort_chromosome_names, sort_summary_data
 from handlers.BamHandler import BamHandler
 from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
@@ -265,8 +266,8 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     # insert
                     cigar_type = "INS"
 
-                    ref_start = ref_index
-                    ref_stop = ref_index + ref_index_increment
+                    ref_start = ref_alignment_start + ref_index
+                    ref_stop = ref_alignment_start + ref_index + ref_index_increment
                     read_start = read_index
                     read_stop = read_index + read_index_increment
 
@@ -291,8 +292,8 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     # delete or refskip
                     cigar_type = "DEL"
 
-                    ref_start = ref_index
-                    ref_stop = ref_index + ref_index_increment
+                    ref_start = ref_alignment_start + ref_index
+                    ref_stop = ref_alignment_start + ref_index + ref_index_increment
                     read_start = read_index
                     read_stop = read_index + read_index_increment
 
@@ -361,10 +362,11 @@ def write_hashed_lists_to_csv(data, output_path):
 
     with open(output_path, "w") as file:
         headers = [item[0] for item in sorted(DATA_INDEXES.items(), key=lambda x: x[1])]
+
         header_line = ",".join(headers) + "\n"
         file.write(header_line)
 
-        for key in data:
+        for key in sort_chromosome_names(data.keys()):
             for element in data[key]:
                 line = [str(key)] + list(map(str,element))  # prepend the key name
                 line = ",".join(line) + "\n"
@@ -432,10 +434,13 @@ def process_bam(bam_path, reference_path, output_dir=None):
     fasta_handler = FastaHandler(reference_path)
 
     chromosome_names = fasta_handler.get_contig_names()
+    chromosome_names = sort_chromosome_names(names=chromosome_names, prefix="chr")
 
-    print(chromosome_names)
+    print("ref contig names:", chromosome_names)
 
     for chromosome_name in chromosome_names:
+        print("Parsing alignments for ref contig:", chromosome_name)
+
         chromosome_length = fasta_handler.get_chr_sequence_length(chromosome_name)
 
         start = 0
