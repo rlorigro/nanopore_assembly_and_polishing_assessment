@@ -1,8 +1,10 @@
+from modules.entropy import calculate_shannon_entropy, find_longest_repeat
 from handlers.BamHandler import BamHandler
 from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
 from collections import defaultdict
 import argparse
+import math
 import csv
 import os
 
@@ -13,14 +15,18 @@ Generate stats/plots on contig identity and alignment given a BAM of contigs VS 
 
 # headers and indexes for indel data vectors
 DATA_INDEXES = {"chromosome_name": 0,
-                "cigar_type": 1,
-                "ref_start": 2,
-                "ref_stop": 3,
-                "ref_allele": 4,
-                "read_start": 5,
-                "read_stop": 6,
-                "read_allele": 7,
-                "reversal_status": 8}
+                "sequence_name": 1,
+                "cigar_type": 2,
+                "ref_start": 3,
+                "ref_stop": 4,
+                "ref_allele": 5,
+                "read_start": 6,
+                "read_stop": 7,
+                "read_allele": 8,
+                "reversal_status": 9,
+                "ref_window":10,
+                "entropy":11,
+                "max_repeat":12}
 
 
 MISMATCH_INDEXES = {"ref_allele": 0,
@@ -145,7 +151,7 @@ def get_read_stop_position(read):
     return ref_alignment_stop
 
 
-def parse_reads(reads, chromosome_name, fasta_handler):
+def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=11):
     """
     Given a set of pysam read objects, generate data for matches/mismatches/inserts/deletes and contig size/position for
     each read
@@ -154,6 +160,9 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     :param fasta_handler: fasta_handler object that can retrieve substrings from the reference sequence
     :return:
     """
+    left_pad = math.floor((homopolymer_window_size - 1)/2)
+    right_pad = math.ceil((homopolymer_window_size - 1)/2) + 1
+
     inserts = defaultdict(list)
     deletes = defaultdict(list)
     mismatches = defaultdict(list)
@@ -236,7 +245,16 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                         ref_allele = mismatch[MISMATCH_INDEXES["ref_allele"]]
                         read_allele = mismatch[MISMATCH_INDEXES["read_allele"]]
 
-                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+                        left_index = mismatch[MISMATCH_INDEXES["ref_start"]] - left_pad
+                        right_index = mismatch[MISMATCH_INDEXES["ref_start"]] + right_pad
+
+                        ref_window = ref_sequence[left_index:right_index]
+
+                        entropy = round(calculate_shannon_entropy(ref_window),3)
+                        max_repeat = find_longest_repeat(ref_window)
+
+                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
+                                read_allele, reversal_status, ref_window, entropy, max_repeat]
 
                         mismatches[read_id].append(data)
 
@@ -252,7 +270,14 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                     read_allele = read_sequence[read_start:read_stop]
                     ref_allele = ref_sequence[ref_start:ref_stop]
 
-                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+                    ref_window = ref_sequence[ref_index-left_pad:ref_index+right_pad]
+
+                    entropy = round(calculate_shannon_entropy(ref_window), 3)
+                    max_repeat = find_longest_repeat(ref_window)
+                    # print(ref_window, max_repeat, entropy)
+
+                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
+                            read_allele, reversal_status, ref_window, entropy, max_repeat]
 
                     inserts[read_id].append(data)
 
@@ -268,7 +293,13 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                     read_allele = read_sequence[read_start:read_stop]
                     ref_allele = ref_sequence[ref_start:ref_stop]
 
-                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+                    ref_window = ref_sequence[ref_index-left_pad:ref_index+right_pad]
+
+                    entropy = round(calculate_shannon_entropy(ref_window), 3)
+                    max_repeat = find_longest_repeat(ref_window)
+
+                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
+                            read_allele, reversal_status, ref_window, entropy, max_repeat]
 
                     deletes[read_id].append(data)
 
