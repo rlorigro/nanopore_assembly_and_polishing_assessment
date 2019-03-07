@@ -27,7 +27,8 @@ DATA_INDEXES = {"sequence_name": 0,
                 "reversal_status": 9,
                 "ref_window":10,
                 "entropy":11,
-                "max_repeat":12}
+                "max_repeat":12,
+                "is_runlength_error": 13}
 
 
 MISMATCH_INDEXES = {"ref_allele": 0,
@@ -257,8 +258,10 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                         entropy = round(calculate_shannon_entropy(ref_window),3)
                         max_repeat = find_longest_repeat(ref_window)
 
+                        is_runlength_error = False
+
                         data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
-                                read_allele, reversal_status, ref_window, entropy, max_repeat]
+                                read_allele, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                         mismatches[read_id].append(data)
 
@@ -272,7 +275,7 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     read_stop = read_index + read_index_increment
 
                     read_allele = read_sequence[read_start:read_stop]
-                    ref_allele = ref_sequence[ref_start:ref_stop]
+                    ref_allele = ref_sequence[ref_index:ref_index + ref_index_increment]
 
                     left_index = max(0, ref_index - left_pad)
                     right_index = min(len(ref_sequence), ref_index + right_pad)
@@ -281,10 +284,16 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
 
                     entropy = round(calculate_shannon_entropy(ref_window), 3)
                     max_repeat = find_longest_repeat(ref_window)
-                    # print(ref_window, max_repeat, entropy)
+
+                    is_runlength_error = False
+
+                    characters = set(read_allele)
+                    if len(characters) == 1:
+                        if read_allele[0] == ref_sequence[ref_index-1] or read_allele[-1] == ref_sequence[ref_index]:
+                            is_runlength_error = True
 
                     data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
-                            read_allele, reversal_status, ref_window, entropy, max_repeat]
+                            read_allele, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                     inserts[read_id].append(data)
 
@@ -298,7 +307,7 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     read_stop = read_index + read_index_increment
 
                     read_allele = read_sequence[read_start:read_stop]
-                    ref_allele = ref_sequence[ref_start:ref_stop]
+                    ref_allele = ref_sequence[ref_index:ref_index + ref_index_increment]
 
                     left_index = max(0, ref_index - left_pad)
                     right_index = min(len(ref_sequence), ref_index + right_pad)
@@ -308,8 +317,21 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                     entropy = round(calculate_shannon_entropy(ref_window), 3)
                     max_repeat = find_longest_repeat(ref_window)
 
+                    is_runlength_error = False
+
+                    # print("DELETE")
+                    # print(ref_sequence[ref_index-1:ref_index+ref_index_increment+1])
+                    # print(read_sequence[read_start-1], read_sequence[read_stop])
+                    # print(is_runlength_error)
+                    # print()
+
+                    characters = set(ref_allele)
+                    if len(characters) == 1:
+                        if ref_allele[0] == read_sequence[read_index-1] or ref_allele[-1] == read_sequence[read_stop]:
+                            is_runlength_error = True
+
                     data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
-                            read_allele, reversal_status, ref_window, entropy, max_repeat]
+                            read_allele, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                     deletes[read_id].append(data)
 
