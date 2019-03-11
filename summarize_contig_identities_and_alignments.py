@@ -788,7 +788,7 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     print("\n" + bam_path)
 
     if max_threads is None:
-        max_threads = cpu_count() - 2
+        max_threads = max(1, cpu_count() - 2)
 
     if output_dir is None:
         output_dir = "plots/"
@@ -802,25 +802,26 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     arguments = list()
 
     for chromosome_name in chromosome_names:
-        # chromosome_length = fasta_handler.get_chr_sequence_length(chromosome_name)
-
         arguments.append([bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path])
 
     if len(arguments) < max_threads:
         max_threads = len(arguments)
 
+    print("Using %d threads..." % max_threads)
+
     with Pool(processes=max_threads) as pool:
         pool.starmap(get_chromosome_data, arguments)
 
 
-def main(bam_path, reference_path, output_dir, centromere_table_path, gap_table_path, segdup_table_path):
+def main(bam_path, reference_path, output_dir, centromere_table_path, gap_table_path, segdup_table_path, max_threads):
 
     process_bam(bam_path=bam_path,
                 reference_path=reference_path,
                 output_dir=output_dir,
                 centromere_table_path=centromere_table_path,
                 gap_table_path=gap_table_path,
-                segdup_table_path=segdup_table_path)
+                segdup_table_path=segdup_table_path,
+                max_threads=max_threads)
 
 
 if __name__ == "__main__":
@@ -864,8 +865,14 @@ if __name__ == "__main__":
         required=False,
         help="desired output directory path (will be created during run time if doesn't exist)"
     )
+    parser.add_argument(
+        "--max_threads", "-t",
+        type=int,
+        required=True,
+        help="FASTA file path of true reference to be compared against"
+    )
 
     args = parser.parse_args()
 
     main(bam_path=args.bam, reference_path=args.ref, output_dir=args.output_dir, centromere_table_path=args.centromeres,
-         gap_table_path=args.gap, segdup_table_path=args.seg_dups)
+         gap_table_path=args.gap, segdup_table_path=args.seg_dups, max_threads=args.max_threads)
