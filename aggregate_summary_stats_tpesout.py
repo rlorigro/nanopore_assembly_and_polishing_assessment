@@ -410,7 +410,7 @@ def plot_identity_comparison_violin(left_identities_per_file, right_identities_p
 
 def plot_per_file_identity_curve(identities_per_file, title=None, output_base=None):
     name_key_start=8
-    name_key_end=18
+    name_key_end=19
     basename = True
 
     identities_per_file = merge_dicts_by_key_idx(identities_per_file, key_start_pos=name_key_start,
@@ -446,7 +446,8 @@ def mmm(value_list, identifier, key_fcn=None, print_it=True):
 
     mean = numpy.mean(value_list)
     median = numpy.median(value_list)
-    mode = stats.mode(value_list)
+    bucketed_value_list = list(map(lambda x: int(x * 200) / 200.0, value_list))
+    mode = stats.mode(bucketed_value_list)
 
     if print_it:
         print("{}: \tmean: {:.5f}\tmedian: {:.5f}\tmode: {:.5f}".format(identifier, mean, median, mode[0][0]))
@@ -484,8 +485,7 @@ def main(summary_glob, output_dir, filter_decoys, args):
     # all_read_lengths.sort()
     # print("top 15 read lengths: {}".format(all_read_lengths[:-15]))
 
-    print("Median Identity: {}".format(numpy.median(identities)))
-    print("Mean Identity:   {}".format(numpy.mean(identities)))
+    mmm(identities, "All Data")
 
     sample_name = args.sample
     if sample_name is None:
