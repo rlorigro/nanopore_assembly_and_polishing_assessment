@@ -21,14 +21,16 @@ DATA_INDEXES = {"sequence_name": 0,
                 "ref_start": 3,
                 "ref_stop": 4,
                 "ref_allele": 5,
-                "read_start": 6,
-                "read_stop": 7,
-                "read_allele": 8,
-                "reversal_status": 9,
-                "ref_window":10,
-                "entropy":11,
-                "max_repeat":12,
-                "is_runlength_error": 13}
+                "ref_allele_context": 6,
+                "read_start": 7,
+                "read_stop": 8,
+                "read_allele": 9,
+                "read_allele_context": 10,
+                "reversal_status": 11,
+                "ref_window": 12,
+                "entropy": 13,
+                "max_repeat": 14,
+                "is_runlength_error": 15}
 
 
 MISMATCH_INDEXES = {"ref_allele": 0,
@@ -260,8 +262,11 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
 
                         is_runlength_error = False
 
-                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
-                                read_allele, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
+                        ref_allele_context = ref_sequence[mismatch[MISMATCH_INDEXES["ref_start"]] - 1:mismatch[MISMATCH_INDEXES["ref_start"]] + 2]
+                        read_allele_context = read_sequence[mismatch[MISMATCH_INDEXES["read_start"]] - 1:mismatch[MISMATCH_INDEXES["read_start"]] + 2]
+
+                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, ref_allele_context, read_start, read_stop,
+                                read_allele, read_allele_context, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                         mismatches[read_id].append(data)
 
@@ -292,8 +297,17 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
                         if read_allele[0] == ref_sequence[ref_index-1] or read_allele[-1] == ref_sequence[ref_index]:
                             is_runlength_error = True
 
-                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
-                            read_allele, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
+                    # print("INSERT")
+                    # print("REF\t",ref_sequence[ref_index-1:ref_index + 1])
+                    # print("READ\t", read_sequence[read_index-1:read_index+read_index_increment+1])
+                    # print(is_runlength_error)
+                    # print()
+
+                    ref_allele_context = ref_sequence[ref_index-1:ref_index + 1]
+                    read_allele_context = read_sequence[read_index-1:read_index+read_index_increment+1]
+
+                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, ref_allele_context, read_start, read_stop,
+                            read_allele, read_allele_context, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                     inserts[read_id].append(data)
 
@@ -319,19 +333,22 @@ def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=1
 
                     is_runlength_error = False
 
-                    # print("DELETE")
-                    # print(ref_sequence[ref_index-1:ref_index+ref_index_increment+1])
-                    # print(read_sequence[read_start-1], read_sequence[read_stop])
-                    # print(is_runlength_error)
-                    # print()
-
                     characters = set(ref_allele)
                     if len(characters) == 1:
                         if ref_allele[0] == read_sequence[read_index-1] or ref_allele[-1] == read_sequence[read_stop]:
                             is_runlength_error = True
 
-                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop,
-                            read_allele, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
+                    # print("DELETE")
+                    # print("REF\t",ref_sequence[ref_index-1:ref_index+ref_index_increment+1])
+                    # print("READ\t",read_sequence[read_start-1:read_stop+1])
+                    # print(is_runlength_error)
+                    # print()
+
+                    ref_allele_context = ref_sequence[ref_index-1:ref_index+ref_index_increment+1]
+                    read_allele_context = read_sequence[read_start-1:read_stop+1]
+
+                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, ref_allele_context, read_start, read_stop,
+                            read_allele, read_allele_context, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                     deletes[read_id].append(data)
 

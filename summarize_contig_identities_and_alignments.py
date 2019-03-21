@@ -1,7 +1,7 @@
 from handlers.BamHandler import BamHandler
 from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
-from multiprocessing import cpu_count, Pool
+from multiprocessing import Manager, cpu_count, Pool
 from matplotlib import pyplot, patches
 from collections import defaultdict
 import argparse
@@ -13,20 +13,43 @@ pyplot.switch_backend('agg')
 Generate stats/plots on contig identity and alignment given a BAM of contigs VS true reference
 '''
 
-# read data indexes
-READ_ID = 0
-REVERSAL_STATUS = 1
-REF_ALIGNMENT_START = 2
-REF_ALIGNMENT_STOP = 3
-ALIGNMENT_LENGTH = 4
-READ_LENGTH = 5
-CONTIG_LENGTH = 6
-N_INITIAL_CLIPPED_BASES = 7
-N_MATCHES = 8
-N_TOTAL_MISMATCHES = 9
-N_TOTAL_DELETES = 10
-N_TOTAL_INSERTS = 11
-IDENTITY = 12
+# Read data indexes
+CHROMOSOME_NAME = 0
+READ_ID = 1
+REVERSAL_STATUS = 2
+REF_ALIGNMENT_START = 3
+REF_ALIGNMENT_STOP = 4
+ALIGNMENT_LENGTH = 5
+READ_LENGTH = 6
+CONTIG_LENGTH = 7
+N_INITIAL_CLIPPED_BASES = 8
+N_MATCHES = 9
+N_TOTAL_MISMATCHES = 10
+N_TOTAL_DELETES = 11
+N_TOTAL_INSERTS = 12
+SEQUENCE_IDENTITY = 13
+ALIGNMENT_IDENTITY = 14
+
+
+# Chromosome data indexes
+CHROMOSOME_NAME = 0         # same as above...
+CHROMOSOME_LENGTH = 1
+FORWARD_MATCHES = 2
+FORWARD_MISMATCHES = 3
+FORWARD_INSERTS = 4
+FORWARD_DELETES = 5
+FORWARD_REF_LENGTH = 6
+FORWARD_READ_LENGTH = 7
+FORWARD_SEQUENCE_IDENTITY = 8
+FORWARD_ALIGNMENT_IDENTITY = 9
+REVERSE_MATCHES = 10
+REVERSE_MISMATCHES = 11
+REVERSE_INSERTS = 12
+REVERSE_DELETES = 13
+REVERSE_REF_LENGTH = 14
+REVERSE_READ_LENGTH = 15
+REVERSE_SEQUENCE_IDENTITY = 16
+REVERSE_ALIGNMENT_IDENTITY = 17
 
 
 def read_centromere_table(centromere_table_path, target_chromosome_name):
@@ -226,7 +249,7 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
         alignment_length = read[ALIGNMENT_LENGTH]
         contig_length = read[CONTIG_LENGTH]
         n_initial_clipped_bases = read[N_INITIAL_CLIPPED_BASES]
-        identity = read[IDENTITY]
+        identity = read[SEQUENCE_IDENTITY]
 
         if reversal_status:
             contig_positions = reverse_contig_positions
@@ -369,6 +392,29 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
     return figure, axes
 
 
+def calculate_sequence_identity(mismatches, deletes, inserts, ref_length, read_length, precision=6):
+    non_matches = \
+        2*mismatches + deletes + inserts
+
+    sequence_identity = \
+        (ref_length + read_length - non_matches) / max(1e-9, (ref_length + read_length))
+
+    # Smudge the approximate zero denominator calculations back to zero
+    sequence_identity = round(sequence_identity, precision)
+
+    return sequence_identity
+
+
+def calculate_alignment_identity(matches, mismatches, inserts, deletes, precision=6):
+    alignment_identity = \
+        matches / max(1e-9, (matches + mismatches + inserts + deletes))
+
+    # Smudge the approximate zero denominator calculations back to zero
+    alignment_identity = round(alignment_identity, precision)
+
+    return alignment_identity
+
+
 def parse_match(alignment_position, length, read_sequence, ref_sequence):
     """
     Process a cigar operation that is a match
@@ -486,7 +532,7 @@ def get_read_stop_position(read):
     return ref_alignment_stop
 
 
-def parse_reads(reads, chromosome_name, fasta_handler):
+def parse_reads(reads, chromosome_name, chromosome_length, fasta_handler):
     """
     Given a set of pysam read objects, generate data for matches/mismatches/inserts/deletes and contig size/position for
     each read
@@ -498,6 +544,20 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     read_data = list()
 
     n_secondary = 0
+
+    chromosome_forward_matches = 0
+    chromosome_forward_mismatches = 0
+    chromosome_forward_inserts = 0
+    chromosome_forward_deletes = 0
+    chromosome_forward_ref_length = 0
+    chromosome_forward_read_length = 0
+
+    chromosome_reverse_matches = 0
+    chromosome_reverse_mismatches = 0
+    chromosome_reverse_inserts = 0
+    chromosome_reverse_deletes = 0
+    chromosome_reverse_ref_length = 0
+    chromosome_reverse_read_length = 0
 
     for read in reads:
         if read.is_secondary:
@@ -570,13 +630,19 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                 n_total_deletes += n_deletes
                 n_total_inserts += n_inserts
 
-            # total_non_matches = n_total_mismatches + n_total_deletes + n_total_inserts
-            total_non_matches = 2*n_total_mismatches + n_total_deletes + n_total_inserts
+            sequence_identity = calculate_sequence_identity(mismatches=n_total_mismatches,
+                                                            deletes=n_total_deletes,
+                                                            inserts=n_total_inserts,
+                                                            ref_length=ref_length,
+                                                            read_length=read_length)
 
-            # identity = (ref_length - total_non_matches) / ref_length
-            identity = (ref_length + read_length - total_non_matches) / (ref_length + read_length)
+            alignment_identity = calculate_alignment_identity(matches=n_total_matches,
+                                                              mismatches=n_total_mismatches,
+                                                              deletes=n_total_deletes,
+                                                              inserts=n_total_inserts)
 
-            data = [read_id,
+            data = [chromosome_name,
+                    read_id,
                     reversal_status,
                     ref_alignment_start,
                     ref_alignment_stop,
@@ -588,68 +654,193 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                     n_total_mismatches,
                     n_total_deletes,
                     n_total_inserts,
-                    identity]
+                    sequence_identity,
+                    alignment_identity]
 
             read_data.append(data)
 
-    return read_data
+            if reversal_status:
+                chromosome_reverse_matches += n_total_matches
+                chromosome_reverse_mismatches += n_total_mismatches
+                chromosome_reverse_inserts += n_total_deletes
+                chromosome_reverse_deletes += n_total_inserts
+                chromosome_reverse_ref_length += ref_length
+                chromosome_reverse_read_length += read_length
+            else:
+                chromosome_forward_matches += n_total_matches
+                chromosome_forward_mismatches += n_total_mismatches
+                chromosome_forward_inserts += n_total_deletes
+                chromosome_forward_deletes += n_total_inserts
+                chromosome_forward_ref_length += ref_length
+                chromosome_forward_read_length += read_length
+
+    # Forward identities
+    chromosome_forward_sequence_identity = calculate_sequence_identity(mismatches=chromosome_forward_mismatches,
+                                                                       deletes=chromosome_forward_deletes,
+                                                                       inserts=chromosome_forward_inserts,
+                                                                       ref_length=chromosome_forward_ref_length,
+                                                                       read_length=chromosome_forward_read_length)
+
+    chromosome_forward_alignment_identity = calculate_alignment_identity(matches=chromosome_forward_matches,
+                                                                         mismatches=chromosome_forward_mismatches,
+                                                                         inserts=chromosome_forward_inserts,
+                                                                         deletes=chromosome_forward_deletes)
+
+    # Reverse identities
+    chromosome_reverse_sequence_identity = calculate_sequence_identity(mismatches=chromosome_reverse_mismatches,
+                                                                       deletes=chromosome_reverse_deletes,
+                                                                       inserts=chromosome_reverse_inserts,
+                                                                       ref_length=chromosome_reverse_ref_length,
+                                                                       read_length=chromosome_reverse_read_length)
+
+    chromosome_reverse_alignment_identity = calculate_alignment_identity(matches=chromosome_reverse_matches,
+                                                                         mismatches=chromosome_reverse_mismatches,
+                                                                         inserts=chromosome_reverse_inserts,
+                                                                         deletes=chromosome_reverse_deletes)
+
+    chromosome_data = [chromosome_name,
+                       chromosome_length,
+                       chromosome_forward_matches,
+                       chromosome_forward_mismatches,
+                       chromosome_forward_inserts,
+                       chromosome_forward_deletes,
+                       chromosome_forward_ref_length,
+                       chromosome_forward_read_length,
+                       chromosome_forward_sequence_identity,
+                       chromosome_forward_alignment_identity,
+                       chromosome_reverse_matches,
+                       chromosome_reverse_mismatches,
+                       chromosome_reverse_inserts,
+                       chromosome_reverse_deletes,
+                       chromosome_reverse_ref_length,
+                       chromosome_reverse_read_length,
+                       chromosome_reverse_sequence_identity,
+                       chromosome_reverse_alignment_identity]
+
+    return read_data, chromosome_data
 
 
-def print_read_summaries(read_data, total_identity, chromosome_name, chromosome_length):
-    print("chromosome_name:\t", chromosome_name)
-    print("chromosome_length:\t", chromosome_length)
-
-    total_forward_alignment_length = 0
-    total_reverse_alignment_length = 0
-
-    for data in read_data:
-        read_id, reversal_status, ref_alignment_start, ref_alignment_stop, alignment_length, read_length, contig_length, n_initial_clipped_bases, n_total_matches, n_total_mismatches, n_total_deletes, n_total_inserts, identity = data
-        print()
-        print(read_id)
-        print("reversed:\t", reversal_status)
-        print("alignment_start:\t", ref_alignment_start)
-        print("alignment_stop:\t\t", ref_alignment_stop)
-        print("alignment_length:\t", alignment_length)
-        print("read_length:\t\t", read_length)
-        print("n_initial_clipped_bases:", n_initial_clipped_bases)
-        print("n_total_matches:\t", n_total_matches)
-        print("n_total_mismatches:\t", n_total_mismatches)
-        print("n_total_deletes:\t", n_total_deletes)
-        print("n_total_inserts:\t", n_total_inserts)
-        print("identity:\t", identity)
-
-        if not reversal_status:
-            total_forward_alignment_length += alignment_length
-        else:
-            total_reverse_alignment_length += alignment_length
-
-    print("\nTOTAL IDENTITY:\t", total_identity)
-
-    print("\nTOTAL FORWARD ALIGNMENT LENGTH:\t", total_forward_alignment_length)
-    print("ROUGH FORWARD COVERAGE ESTIMATE:\t", total_forward_alignment_length / chromosome_length)
-
-    print("\nTOTAL REVERSE ALIGNMENT LENGTH:\t", total_reverse_alignment_length)
-    print("ROUGH REVERSE COVERAGE ESTIMATE:\t", total_reverse_alignment_length / chromosome_length)
-
-
-def export_summaries_to_csv(read_data, total_identity, chromosome_length, output_dir, bam_path, chromosome_name):
-    total_forward_alignment_length = 0
-    total_reverse_alignment_length = 0
-    total_forward_matches = 0
-    total_reverse_matches = 0
-    total_forward_mismatches = 0
-    total_reverse_mismatches = 0
-    total_forward_inserts = 0
-    total_reverse_inserts = 0
-    total_forward_deletes = 0
-    total_reverse_deletes = 0
-
+def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
     csv_rows = list()
-    csv_rows.append(["contig_name"])
+
+    total_length = 0
+    total_forward_matches = 0
+    total_forward_mismatches = 0
+    total_forward_inserts = 0
+    total_forward_deletes = 0
+    total_forward_ref_length = 0
+    total_forward_read_length = 0
+    total_reverse_matches = 0
+    total_reverse_mismatches = 0
+    total_reverse_inserts = 0
+    total_reverse_deletes = 0
+    total_reverse_ref_length = 0
+    total_reverse_read_length = 0
+
+    csv_rows.append(["chromosome_name"])
+    csv_rows.append(["chromosome_length"])
+    csv_rows.append(["forward_matches"])
+    csv_rows.append(["forward_mismatches"])
+    csv_rows.append(["forward_inserts"])
+    csv_rows.append(["forward_deletes"])
+    csv_rows.append(["forward_ref_length"])
+    csv_rows.append(["forward_read_length"])
+    csv_rows.append(["forward_sequence_identity"])
+    csv_rows.append(["forward_alignment_identity"])
+    csv_rows.append(["reverse_matches"])
+    csv_rows.append(["reverse_mismatches"])
+    csv_rows.append(["reverse_inserts"])
+    csv_rows.append(["reverse_deletes"])
+    csv_rows.append(["reverse_ref_length"])
+    csv_rows.append(["reverse_read_length"])
+    csv_rows.append(["reverse_sequence_identity"])
+    csv_rows.append(["reverse_alignment_identity"])
+
+    for d, data in enumerate(sorted(genome_data, key=lambda x: x[CHROMOSOME_NAME])):
+        total_length += data[CHROMOSOME_LENGTH]
+        total_forward_matches += data[FORWARD_MATCHES]
+        total_forward_mismatches += data[FORWARD_MISMATCHES]
+        total_forward_inserts += data[FORWARD_INSERTS]
+        total_forward_deletes += data[FORWARD_DELETES]
+        total_forward_ref_length += data[FORWARD_REF_LENGTH]
+        total_forward_read_length += data[FORWARD_READ_LENGTH]
+        total_reverse_matches += data[REVERSE_MATCHES]
+        total_reverse_mismatches += data[REVERSE_MISMATCHES]
+        total_reverse_inserts += data[REVERSE_INSERTS]
+        total_reverse_deletes += data[REVERSE_DELETES]
+        total_reverse_ref_length += data[REVERSE_REF_LENGTH]
+        total_reverse_read_length += data[REVERSE_READ_LENGTH]
+
+        for i in range(REVERSE_ALIGNMENT_IDENTITY + 1):
+            csv_rows[i].append(data[i])
+
+    # Transpose
+    csv_rows = list(map(list, zip(*csv_rows)))
+
+    # Forward identities
+    total_forward_alignment_identity = calculate_alignment_identity(matches=total_forward_matches,
+                                                                    mismatches=total_forward_mismatches,
+                                                                    inserts=total_forward_inserts,
+                                                                    deletes=total_forward_deletes)
+
+    total_forward_sequence_identity = calculate_sequence_identity(mismatches=total_forward_mismatches,
+                                                                  inserts=total_forward_inserts,
+                                                                  deletes=total_forward_deletes,
+                                                                  ref_length=total_forward_ref_length,
+                                                                  read_length=total_forward_read_length)
+
+    # Reverse identities
+    total_reverse_alignment_identity = calculate_alignment_identity(matches=total_reverse_matches,
+                                                                    mismatches=total_reverse_mismatches,
+                                                                    inserts=total_reverse_inserts,
+                                                                    deletes=total_reverse_deletes)
+
+    total_reverse_sequence_identity = calculate_sequence_identity(mismatches=total_reverse_mismatches,
+                                                                  inserts=total_reverse_inserts,
+                                                                  deletes=total_reverse_deletes,
+                                                                  ref_length=total_reverse_ref_length,
+                                                                  read_length=total_reverse_read_length)
+
+    csv_rows.append(["total_length", total_length])
+    csv_rows.append(["total_forward_matches", total_forward_matches])
+    csv_rows.append(["total_forward_mismatches", total_forward_mismatches])
+    csv_rows.append(["total_forward_inserts", total_forward_inserts])
+    csv_rows.append(["total_forward_deletes", total_forward_deletes])
+    csv_rows.append(["total_forward_ref_length", total_forward_ref_length])
+    csv_rows.append(["total_forward_read_length", total_forward_read_length])
+    csv_rows.append(["total_forward_alignment_identity", total_forward_alignment_identity])
+    csv_rows.append(["total_forward_sequence_identity", total_forward_sequence_identity])
+    csv_rows.append(["total_reverse_matches", total_reverse_matches])
+    csv_rows.append(["total_reverse_mismatches", total_reverse_mismatches])
+    csv_rows.append(["total_reverse_inserts", total_reverse_inserts])
+    csv_rows.append(["total_reverse_deletes", total_reverse_deletes])
+    csv_rows.append(["total_reverse_ref_length", total_reverse_ref_length])
+    csv_rows.append(["total_reverse_read_length", total_reverse_read_length])
+    csv_rows.append(["total_reverse_alignment_identity", total_reverse_alignment_identity])
+    csv_rows.append(["total_reverse_sequence_identity", total_reverse_sequence_identity])
+
+    filename = os.path.basename(bam_path)
+    filename_prefix = ".".join(filename.split(".")[:-1])
+    filename_prefix = filename_prefix + "_whole_genome"
+    output_filename = "summary_" + filename_prefix + ".csv"
+    output_file_path = os.path.join(output_dir, output_filename)
+
+    print("\nSAVING CSV: %s" % output_file_path)
+
+    with open(output_file_path, "w") as file:
+        writer = csv.writer(file)
+        for row in csv_rows:
+            writer.writerow(row)
+
+
+def export_chromosome_summary_to_csv(read_data, chromosome_data, output_dir, bam_path, chromosome_name):
+    csv_rows = list()
+    csv_rows.append(["chromosome_name"])
+    csv_rows.append(["read_id"])
     csv_rows.append(["reversal_status"])
     csv_rows.append(["ref_alignment_start"])
     csv_rows.append(["ref_alignment_stop"])
-    csv_rows.append(["alignment_length"])
+    csv_rows.append(["ref_length"])
     csv_rows.append(["read_length"])
     csv_rows.append(["contig_length"])
     csv_rows.append(["n_initial_clipped_bases"])
@@ -657,47 +848,35 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
     csv_rows.append(["n_total_mismatches"])
     csv_rows.append(["n_total_deletes"])
     csv_rows.append(["n_total_inserts"])
+    csv_rows.append(["sequence_identity"])
+    csv_rows.append(["alignment_identity"])
 
-    for data in sorted(read_data, key=lambda x: x[REF_ALIGNMENT_START]):
-        for i in range(IDENTITY):
+    for d, data in enumerate(sorted(read_data, key=lambda x: x[REF_ALIGNMENT_START])):
+        # print(d)
+        for i in range(ALIGNMENT_IDENTITY + 1):
             csv_rows[i].append(data[i])
-
-        if not data[REVERSAL_STATUS]:
-            total_forward_alignment_length += data[ALIGNMENT_LENGTH]
-            total_forward_matches += data[N_MATCHES]
-            total_forward_mismatches += data[N_TOTAL_MISMATCHES]
-            total_forward_inserts += data[N_TOTAL_INSERTS]
-            total_forward_deletes += data[N_TOTAL_DELETES]
-
-        else:
-            total_reverse_alignment_length += data[ALIGNMENT_LENGTH]
-            total_reverse_matches += data[N_MATCHES]
-            total_reverse_mismatches += data[N_TOTAL_MISMATCHES]
-            total_reverse_inserts += data[N_TOTAL_INSERTS]
-            total_reverse_deletes += data[N_TOTAL_DELETES]
 
     # Transpose
     csv_rows = list(map(list, zip(*csv_rows)))
 
-    csv_rows.append(["total_reverse_matches",total_reverse_matches])
-    csv_rows.append(["total_reverse_mismatches",total_reverse_mismatches])
-    csv_rows.append(["total_reverse_inserts",total_reverse_inserts])
-    csv_rows.append(["total_reverse_deletes",total_reverse_deletes])
-    csv_rows.append(["total_forward_matches",total_forward_matches])
-    csv_rows.append(["total_forward_mismatches",total_forward_mismatches])
-    csv_rows.append(["total_forward_inserts",total_forward_inserts])
-    csv_rows.append(["total_forward_deletes",total_forward_deletes])
-    csv_rows.append(["total_identity",total_identity])
-    csv_rows.append(["total_forward_alignment_length",total_forward_alignment_length])
-    csv_rows.append(["forward_coverage_estimate",total_forward_alignment_length / chromosome_length])
-    csv_rows.append(["total_reverse_alignment_length",total_reverse_alignment_length])
-    csv_rows.append(["reverse_coverage_estimate",total_reverse_alignment_length / chromosome_length])
-
-    total_forward_conventional_identity = total_forward_matches / (total_forward_matches + total_forward_mismatches + total_forward_inserts + total_forward_deletes)
-    total_reverse_conventional_identity = total_reverse_matches / (total_reverse_matches + total_reverse_mismatches + total_reverse_inserts + total_reverse_deletes)
-
-    csv_rows.append(["total_forward_conventional_identity", total_forward_conventional_identity])
-    csv_rows.append(["total_reverse_conventional_identity", total_reverse_conventional_identity])
+    csv_rows.append(["chromosome_name", chromosome_data[CHROMOSOME_NAME]])
+    csv_rows.append(["chromosome_length", chromosome_data[CHROMOSOME_LENGTH]])
+    csv_rows.append(["total_forward_matches", chromosome_data[FORWARD_MATCHES]])
+    csv_rows.append(["total_forward_mismatches", chromosome_data[FORWARD_MISMATCHES]])
+    csv_rows.append(["total_forward_inserts", chromosome_data[FORWARD_INSERTS]])
+    csv_rows.append(["total_forward_deletes", chromosome_data[FORWARD_DELETES]])
+    csv_rows.append(["total_forward_ref_length", chromosome_data[FORWARD_REF_LENGTH]])
+    csv_rows.append(["total_forward_read_length", chromosome_data[FORWARD_READ_LENGTH]])
+    csv_rows.append(["total_forward_sequence_identity", chromosome_data[FORWARD_SEQUENCE_IDENTITY]])
+    csv_rows.append(["total_forward_alignment_identity", chromosome_data[FORWARD_ALIGNMENT_IDENTITY]])
+    csv_rows.append(["total_reverse_matches", chromosome_data[REVERSE_MATCHES]])
+    csv_rows.append(["total_reverse_mismatches", chromosome_data[REVERSE_MISMATCHES]])
+    csv_rows.append(["total_reverse_inserts", chromosome_data[REVERSE_INSERTS]])
+    csv_rows.append(["total_reverse_deletes", chromosome_data[REVERSE_DELETES]])
+    csv_rows.append(["total_reverse_ref_length", chromosome_data[REVERSE_REF_LENGTH]])
+    csv_rows.append(["total_reverse_read_length", chromosome_data[REVERSE_READ_LENGTH]])
+    csv_rows.append(["total_reverse_sequence_identity", chromosome_data[REVERSE_SEQUENCE_IDENTITY]])
+    csv_rows.append(["total_reverse_alignment_identity", chromosome_data[REVERSE_ALIGNMENT_IDENTITY]])
 
     filename = os.path.basename(bam_path+"_"+chromosome_name)
     filename_prefix = ".".join(filename.split(".")[:-1])
@@ -712,7 +891,7 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
             writer.writerow(row)
 
 
-def get_chromosome_data(bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path):
+def get_chromosome_data(bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path, genome_data):
     fasta_handler = FastaHandler(reference_path)
     bam_handler = BamHandler(bam_file_path=bam_path)
 
@@ -723,26 +902,24 @@ def get_chromosome_data(bam_path, reference_path, chromosome_name, output_dir, c
 
     reads = bam_handler.get_reads(chromosome_name=chromosome_name, start=start, stop=stop)
 
-    read_data = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
+    read_data, chromosome_data = parse_reads(reads=reads,
+                                             fasta_handler=fasta_handler,
+                                             chromosome_name=chromosome_name,
+                                             chromosome_length=chromosome_length)
 
-    total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
+    genome_data.append(chromosome_data)
+
+    # Calculate total identity, and approximate 0 if denominator is zero for F and R
+    total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[SEQUENCE_IDENTITY] for x in read_data])
     total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
-
-    # Calculate total identity, and approximate 0 if denominator is zero
     total_identity = total_weighted_identity / max(1e-9, total_alignment_bases)
     total_identity = round(total_identity, 6)
 
-    # print_read_summaries(read_data=read_data,
-    #                      total_identity=total_identity,
-    #                      chromosome_name=chromosome_name,
-    #                      chromosome_length=chromosome_length)
-
-    export_summaries_to_csv(read_data=read_data,
-                            total_identity=total_identity,
-                            chromosome_length=chromosome_length,
-                            output_dir=output_dir,
-                            bam_path=bam_path,
-                            chromosome_name=chromosome_name)
+    export_chromosome_summary_to_csv(read_data=read_data,
+                                     chromosome_data=chromosome_data,
+                                     output_dir=output_dir,
+                                     bam_path=bam_path,
+                                     chromosome_name=chromosome_name)
 
     if centromere_table_path is not None:
         centromere_coordinates = read_centromere_table(centromere_table_path=centromere_table_path,
@@ -793,6 +970,9 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     if output_dir is None:
         output_dir = "plots/"
 
+    process_manager = Manager()
+    genome_data = process_manager.list()
+
     FileManager.ensure_directory_exists(output_dir)
 
     fasta_handler = FastaHandler(reference_path)
@@ -802,7 +982,7 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     arguments = list()
 
     for chromosome_name in chromosome_names:
-        arguments.append([bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path])
+        arguments.append([bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path, genome_data])
 
     if len(arguments) < max_threads:
         max_threads = len(arguments)
@@ -811,6 +991,8 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
 
     with Pool(processes=max_threads) as pool:
         pool.starmap(get_chromosome_data, arguments)
+
+    export_genome_summary_to_csv(bam_path=bam_path, output_dir=output_dir, genome_data=genome_data)
 
 
 def main(bam_path, reference_path, output_dir, centromere_table_path, gap_table_path, segdup_table_path, max_threads):
@@ -868,7 +1050,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_threads", "-t",
         type=int,
-        required=True,
+        required=False,
         help="FASTA file path of true reference to be compared against"
     )
 

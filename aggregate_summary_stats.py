@@ -247,7 +247,7 @@ if __name__ == "__main__":
         "--summary_dir", "-i",
         type=str,
         required=True,
-        help="BAM file path of contigs aligned to true reference"
+        help="directory where the output of get_summary_stats.py is located"
     )
     parser.add_argument(
         "--output_dir", "-o",
