@@ -1,9 +1,9 @@
 
 
-def get_ordering(chromsome_name, prefix):
+def get_ordering(chromosome_name, prefix):
     ordering = list()
 
-    suffix = get_chromosome_suffix(chromsome_name, prefix)
+    suffix = get_chromosome_suffix(chromosome_name, prefix)
 
     if suffix.isdigit():
         index = int(suffix)

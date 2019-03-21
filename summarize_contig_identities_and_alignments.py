@@ -1,6 +1,7 @@
 from handlers.BamHandler import BamHandler
 from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
+from modules.sort import *
 from multiprocessing import Manager, cpu_count, Pool
 from matplotlib import pyplot, patches
 from collections import defaultdict
@@ -720,6 +721,12 @@ def parse_reads(reads, chromosome_name, chromosome_length, fasta_handler):
     return read_data, chromosome_data
 
 
+def sort_summary_data(data, chromosome_name_index, prefix="chr"):
+    summary_data = sorted(data, key=lambda x: get_ordering(x[chromosome_name_index], prefix))
+
+    return summary_data
+
+
 def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
     csv_rows = list()
 
@@ -756,7 +763,7 @@ def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
     csv_rows.append(["reverse_sequence_identity"])
     csv_rows.append(["reverse_alignment_identity"])
 
-    for d, data in enumerate(sorted(genome_data, key=lambda x: x[CHROMOSOME_NAME])):
+    for d, data in enumerate(sort_summary_data(genome_data, chromosome_name_index=CHROMOSOME_NAME)):
         total_length += data[CHROMOSOME_LENGTH]
         total_forward_matches += data[FORWARD_MATCHES]
         total_forward_mismatches += data[FORWARD_MISMATCHES]
