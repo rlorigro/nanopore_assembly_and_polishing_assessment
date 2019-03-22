@@ -887,7 +887,7 @@ def export_chromosome_summary_to_csv(read_data, chromosome_data, output_dir, bam
 
     filename = os.path.basename(bam_path+"_"+chromosome_name)
     filename_prefix = ".".join(filename.split(".")[:-1])
-    output_filename = "summary_" + filename_prefix + "_" + chromosome_name + ".csv"
+    output_filename = "summary_" + filename_prefix + ".csv"
     output_file_path = os.path.join(output_dir, output_filename)
 
     print("\nSAVING CSV: %s" % output_file_path)
