@@ -990,9 +990,6 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     arguments = list()
 
     for chromosome_name in chromosome_names:
-        if chromosome_name != "chr6":
-            continue
-
         arguments.append([bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path, genome_data])
 
     if len(arguments) < max_threads:
