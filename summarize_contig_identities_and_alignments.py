@@ -378,9 +378,9 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
                      color=[0.9, 0.7, 0.7])
 
     if save:
-        filename = os.path.basename(bam_path+"_"+chromosome_name)
+        filename = os.path.basename(bam_path)
         filename_prefix = ".".join(filename.split(".")[:-1])
-        output_filename = filename_prefix + ".png"
+        output_filename = "summary_" + filename_prefix + "_" + chromosome_name + ".png"
         output_file_path = os.path.join(output_dir, output_filename)
         pyplot.axis("off")
 
@@ -586,6 +586,7 @@ def parse_reads(reads, chromosome_name, chromosome_length, fasta_handler):
             # read_index: index of read sequence
             # ref_index: index of reference sequence
             read_index = 0
+            read_start_index = read_index
             ref_index = 0
             found_valid_cigar = False
 
@@ -609,6 +610,7 @@ def parse_reads(reads, chromosome_name, chromosome_length, fasta_handler):
                     # only increment the read index if the non-match cigar code is INS or SOFTCLIP
                     if cigar_code == 1 or cigar_code == 4:
                         read_index += length
+                        read_start_index = read_index
                     if cigar_code == 5 or cigar_code == 4:
                         n_initial_clipped_bases = length
                     continue
@@ -648,7 +650,7 @@ def parse_reads(reads, chromosome_name, chromosome_length, fasta_handler):
                     ref_alignment_start,
                     ref_alignment_stop,
                     ref_length,
-                    read_length,
+                    n_total_matches+n_total_mismatches+n_total_inserts,
                     contig_length,
                     n_initial_clipped_bases,
                     n_total_matches,
@@ -828,8 +830,7 @@ def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
 
     filename = os.path.basename(bam_path)
     filename_prefix = ".".join(filename.split(".")[:-1])
-    filename_prefix = filename_prefix + "_whole_genome"
-    output_filename = "summary_" + filename_prefix + ".csv"
+    output_filename = "summary_" + filename_prefix + "_whole_genome" + ".csv"
     output_file_path = os.path.join(output_dir, output_filename)
 
     print("\nSAVING CSV: %s" % output_file_path)
@@ -885,9 +886,9 @@ def export_chromosome_summary_to_csv(read_data, chromosome_data, output_dir, bam
     csv_rows.append(["total_reverse_sequence_identity", chromosome_data[REVERSE_SEQUENCE_IDENTITY]])
     csv_rows.append(["total_reverse_alignment_identity", chromosome_data[REVERSE_ALIGNMENT_IDENTITY]])
 
-    filename = os.path.basename(bam_path+"_"+chromosome_name)
+    filename = os.path.basename(bam_path)
     filename_prefix = ".".join(filename.split(".")[:-1])
-    output_filename = "summary_" + filename_prefix + ".csv"
+    output_filename = "summary_" + filename_prefix + "_" + chromosome_name + ".csv"
     output_file_path = os.path.join(output_dir, output_filename)
 
     print("\nSAVING CSV: %s" % output_file_path)
@@ -989,6 +990,9 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     arguments = list()
 
     for chromosome_name in chromosome_names:
+        if chromosome_name != "chr6":
+            continue
+
         arguments.append([bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path, genome_data])
 
     if len(arguments) < max_threads:
