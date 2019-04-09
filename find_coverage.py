@@ -1,36 +1,67 @@
+import matplotlib
 from matplotlib import pyplot
 import argparse
+import platform
 import pysam
 import math
 import sys
+import os
 
-pyplot.switch_backend('agg')
+
+if os.environ.get("DISPLAY", "") == "":
+   print("no display found. Using non-interactive Agg backend")
+   matplotlib.use("Agg")
+
+if platform.system() == "Darwin":
+   matplotlib.use("macosx")
 
 
-def get_coverage(bam_file_path, chromosome_name, start, stop):
+def get_coverage_range(bam_file_path, chromosome_name, start, stop):
     sam_file = pysam.AlignmentFile(bam_file_path, "rb")
 
     pileup_columns = sam_file.pileup(chromosome_name, start, stop)
     coverages = list()
 
+    max_coverage = 0
     for pileup_column in pileup_columns:
         position = pileup_column.pos
-        coverage = pileup_column.nsegments
+        position_coverage = pileup_column.nsegments
 
         if start < position < stop:
-            coverages.append(coverage)
+            coverages.append(position_coverage)
+
+            if position_coverage > max_coverage:
+                max_coverage = position_coverage
 
     sam_file.close()
 
-    return coverages
+    return coverages, max_coverage
+
+
+def get_coverage(bam_file_path, chromosome_name, coordinate):
+    sam_file = pysam.AlignmentFile(bam_file_path, "rb")
+
+    pileup_columns = sam_file.pileup(chromosome_name, coordinate, coordinate+2)
+    coverage = 0
+
+    for pileup_column in pileup_columns:
+        position = pileup_column.pos
+        position_coverage = pileup_column.nsegments
+
+        if position == coordinate:
+            coverage = position_coverage
+
+    sam_file.close()
+
+    return coverage
 
 
 def test():
     # BAM of reads aligned to some sequence
-    bam_path = "/home/ryan/code/runlength_analysis/output/runlength_matrix_from_sequence_2019_3_27_13_13_54_735626/sequence_subset_train_60x_10kb_rle_VS_refEcoli_rle.sorted.bam"
+    bam_path = "/home/ryan/code/runlength_analysis/output/runlength_matrix_from_guppy_fasta_wg_60x_10kb/sequence_subset_train_60x_10kb_rle_VS_refEcoli_rle.sorted.bam"
 
     # Fasta containing the sequences that are the reference in the BAM
-    fasta_path = "/home/ryan/code/runlength_analysis/output/runlength_matrix_from_sequence_2019_3_27_11_15_11_736904/refEcoli_rle.fasta"
+    fasta_path = "/home/ryan/code/runlength_analysis/output/runlength_matrix_from_guppy_fasta_wg_60x_10kb/refEcoli_rle.fasta"
 
     fasta_handler = pysam.FastaFile(fasta_path)
     chromosome_names = fasta_handler.references
@@ -50,9 +81,9 @@ def test():
 
         for c,coord in enumerate(steps):
             coord = int(math.floor(coord))
-            coverage = get_coverage(bam_file_path=bam_path, chromosome_name=name, start=coord, stop=coord+2)[0]
+            coverage = get_coverage(bam_file_path=bam_path, chromosome_name=name, coordinate=coord)
             coverages.append(coverage)
-            sys.stderr.write("\r %.2f%%" % (c+1/n_samples*100))
+            sys.stderr.write("\r %.2f%%" % ((c+1)/n_samples*100))
 
         sys.stderr.write("\n")
 
@@ -61,18 +92,7 @@ def test():
     pyplot.close()
 
 
-def main(bam_path, chromosome_name, start, stop, n_samples):
-    """
-    :param bam_path: BAM of reads aligned to some sequence
-    :param fasta_path: Fasta containing the sequences that are the reference in the BAM
-    :param chromosome_name:
-    :param start:
-    :param stop:
-    :param n_samples: How many times to check coverage within region (regularly spaced)
-    :return:
-    """
-    print("Testing chromosome '%s' from %d to %d" % (chromosome_name, start, stop))
-
+def get_coverage_subsample(bam_path, chromosome_name, start, stop, n_samples):
     coverages = list()
 
     step_size = int(round((stop-start)/n_samples))
@@ -83,12 +103,43 @@ def main(bam_path, chromosome_name, start, stop, n_samples):
     max_coverage = 0
     for c,coord in enumerate(steps):
         coord = int(math.floor(coord))
-        coverage = get_coverage(bam_file_path=bam_path, chromosome_name=chromosome_name, start=coord, stop=coord+2)[0]
+        coverage = get_coverage(bam_file_path=bam_path, chromosome_name=chromosome_name, coordinate=coord)
         coverages.append(coverage)
-        sys.stderr.write("\r %.2f%%" % (c+1/n_samples*100))
+        sys.stderr.write("\r %.2f%%" % ((c+1)/n_samples*100))
 
         if coverage > max_coverage:
             max_coverage = coverage
+
+    return coverages, max_coverage
+
+
+def main(bam_path, chromosome_name, start, stop, n_samples):
+    """
+    :param bam_path: BAM of reads aligned to some sequence
+    :param chromosome_name:
+    :param start:
+    :param stop:
+    :param n_samples: How many times to check coverage within region (regularly spaced)
+    :return:
+    """
+    print("Testing chromosome '%s' from %d to %d" % (chromosome_name, start, stop))
+
+    if n_samples is None:
+        # Sample every position
+        coverages, max_coverage = get_coverage_range(bam_file_path=bam_path,
+                                                     chromosome_name=chromosome_name,
+                                                     start=start,
+                                                     stop=stop)
+
+    else:
+        # Sample only the specified number of times
+        coverages, max_coverage = get_coverage_subsample(bam_path=bam_path,
+                                                         chromosome_name=chromosome_name,
+                                                         start=start,
+                                                         stop=stop,
+                                                         n_samples=n_samples)
+
+    print("\n", len(coverages))
 
     sys.stderr.write("\n")
 
@@ -101,7 +152,7 @@ def main(bam_path, chromosome_name, start, stop, n_samples):
 
     pyplot.savefig("coverage.png")
 
-    # pyplot.show()
+    pyplot.show()
     pyplot.close()
 
 
@@ -135,7 +186,6 @@ if __name__ == "__main__":
         "--samples", "-n",
         type=int,
         required=False,
-        default=100,
         help="How many times to sample the region"
     )
 
