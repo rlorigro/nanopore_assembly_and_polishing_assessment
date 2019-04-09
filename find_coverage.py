@@ -4,6 +4,8 @@ import pysam
 import math
 import sys
 
+pyplot.switch_backend('agg')
+
 
 def get_coverage(bam_file_path, chromosome_name, start, stop):
     sam_file = pysam.AlignmentFile(bam_file_path, "rb")
