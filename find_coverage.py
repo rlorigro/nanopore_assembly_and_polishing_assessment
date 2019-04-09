@@ -151,9 +151,9 @@ def main(bam_path, chromosome_name, start, stop, n_samples):
     sys.stderr.write("\n")
 
     axes = pyplot.axes()
-    axes.plot(positions, coverages)
+    axes.scatter(positions, coverages, s=0.5)
     axes.set_ylim([0, round(max_coverage*1.1)])
-    axes.set_title("Coverage on chromosome '%s' from %d to %d" % (chromosome_name, start, stop))
+    axes.set_title("Coverage on %s" % chromosome_name)
     axes.set_ylabel("Coverage (# reads)")
     axes.set_xlabel("Coordinate")
 
