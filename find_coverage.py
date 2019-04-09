@@ -21,6 +21,7 @@ def get_coverage_range(bam_file_path, chromosome_name, start, stop):
 
     pileup_columns = sam_file.pileup(chromosome_name, start, stop)
     coverages = list()
+    positions = list()
 
     max_coverage = 0
     for pileup_column in pileup_columns:
@@ -29,13 +30,14 @@ def get_coverage_range(bam_file_path, chromosome_name, start, stop):
 
         if start < position < stop:
             coverages.append(position_coverage)
+            positions.append(position)
 
             if position_coverage > max_coverage:
                 max_coverage = position_coverage
 
     sam_file.close()
 
-    return coverages, max_coverage
+    return positions, coverages, max_coverage
 
 
 def get_coverage(bam_file_path, chromosome_name, coordinate):
@@ -54,6 +56,29 @@ def get_coverage(bam_file_path, chromosome_name, coordinate):
     sam_file.close()
 
     return coverage
+
+
+def get_coverage_subsample(bam_path, chromosome_name, start, stop, n_samples):
+    coverages = list()
+    positions = list()
+
+    step_size = int(round((stop-start)/n_samples))
+    steps = range(start, stop, step_size)
+
+    print(steps)
+
+    max_coverage = 0
+    for c,coord in enumerate(steps):
+        coord = int(math.floor(coord))
+        coverage = get_coverage(bam_file_path=bam_path, chromosome_name=chromosome_name, coordinate=coord)
+        coverages.append(coverage)
+        positions.append(coord)
+        sys.stderr.write("\r %.2f%%" % ((c+1)/n_samples*100))
+
+        if coverage > max_coverage:
+            max_coverage = coverage
+
+    return positions, coverages, max_coverage
 
 
 def test():
@@ -92,27 +117,6 @@ def test():
     pyplot.close()
 
 
-def get_coverage_subsample(bam_path, chromosome_name, start, stop, n_samples):
-    coverages = list()
-
-    step_size = int(round((stop-start)/n_samples))
-    steps = range(start, stop, step_size)
-
-    print(steps)
-
-    max_coverage = 0
-    for c,coord in enumerate(steps):
-        coord = int(math.floor(coord))
-        coverage = get_coverage(bam_file_path=bam_path, chromosome_name=chromosome_name, coordinate=coord)
-        coverages.append(coverage)
-        sys.stderr.write("\r %.2f%%" % ((c+1)/n_samples*100))
-
-        if coverage > max_coverage:
-            max_coverage = coverage
-
-    return coverages, max_coverage
-
-
 def main(bam_path, chromosome_name, start, stop, n_samples):
     """
     :param bam_path: BAM of reads aligned to some sequence
@@ -126,29 +130,36 @@ def main(bam_path, chromosome_name, start, stop, n_samples):
 
     if n_samples is None:
         # Sample every position
-        coverages, max_coverage = get_coverage_range(bam_file_path=bam_path,
-                                                     chromosome_name=chromosome_name,
-                                                     start=start,
-                                                     stop=stop)
+        positions, coverages, max_coverage = get_coverage_range(bam_file_path=bam_path,
+                                                                chromosome_name=chromosome_name,
+                                                                start=start,
+                                                                stop=stop)
 
     else:
         # Sample only the specified number of times
-        coverages, max_coverage = get_coverage_subsample(bam_path=bam_path,
-                                                         chromosome_name=chromosome_name,
-                                                         start=start,
-                                                         stop=stop,
-                                                         n_samples=n_samples)
+        positions, coverages, max_coverage = get_coverage_subsample(bam_path=bam_path,
+                                                                    chromosome_name=chromosome_name,
+                                                                    start=start,
+                                                                    stop=stop,
+                                                                    n_samples=n_samples)
 
     print("\n", len(coverages))
+
+    print(positions[:10])
+    print(coverages[:10])
 
     sys.stderr.write("\n")
 
     axes = pyplot.axes()
-    axes.plot(coverages)
+    axes.plot(positions, coverages)
     axes.set_ylim([0, round(max_coverage*1.1)])
     axes.set_title("Coverage on chromosome '%s' from %d to %d" % (chromosome_name, start, stop))
     axes.set_ylabel("Coverage (# reads)")
-    axes.set_xlabel("Interval")
+    axes.set_xlabel("Coordinate")
+
+    pyplot.xticks(rotation=45)
+    axes.ticklabel_format(useOffset=False, style='plain')
+    pyplot.tight_layout()
 
     pyplot.savefig("coverage.png")
 
