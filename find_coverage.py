@@ -161,7 +161,7 @@ def main(bam_path, chromosome_name, start, stop, n_samples):
     axes.ticklabel_format(useOffset=False, style='plain')
     pyplot.tight_layout()
 
-    pyplot.savefig("coverage.png")
+    pyplot.savefig("coverage.png", dpi=300)
 
     pyplot.show()
     pyplot.close()
