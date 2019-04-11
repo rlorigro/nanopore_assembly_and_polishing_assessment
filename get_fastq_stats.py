@@ -12,7 +12,8 @@ Iterate a fastq file and find the read length distribution, as well as cumulativ
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/subsampled/30x/r94_ec_rad2.30x.fastq"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.first50k.fastq"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.fastq"
-READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_rad2.fastq"
+READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_first_410k.fastq"
+# READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_last_410k.fastq"
 # READS_PATH = "/home/ryan/Downloads/r94_ec_rad2.30x.fastq"
 
 
@@ -35,7 +36,6 @@ def print_stats(step, frequencies, n_reads):
     print("\t\t\t\tn\tproportion")
 
     for threshold in [10000,20000,30000]:
-        # threshold = 10000
         index = threshold/step - 1
         index = int(index)
 
@@ -44,7 +44,7 @@ def print_stats(step, frequencies, n_reads):
         proportion = right_side_sum/n_reads
 
         # number of reads greater than "threshold"
-        print("reads greater than %d:\t%d\t%.3f"%(threshold, right_side_sum, proportion))
+        print("reads greater than %d:\t%d\t%.3f" % (threshold, right_side_sum, proportion))
 
     print("n reads total (all lengths):\t%d"%n_reads)
 
@@ -54,6 +54,7 @@ def main():
 
     n_reads = 0
     lengths = list()
+    length_sum = 0
 
     for i, item in enumerate(parser.iterate_file(path=READS_PATH)):
         n_reads += 1
@@ -66,6 +67,7 @@ def main():
         # print(quality[:30])
 
         lengths.append(len(sequence))
+        length_sum += len(sequence)
 
         sys.stdout.write("\r%d"%i)
 
@@ -79,11 +81,15 @@ def main():
     bins = numpy.arange(0, max_length + step, step=step)
     frequencies, _ = numpy.histogram(lengths, bins=bins)
 
+    print(bins, frequencies)
+
     plot_length_distribution(step=step, bins=bins, frequencies=frequencies)
 
     # ---- Printing ----
 
     print_stats(step=step, frequencies=frequencies, n_reads=n_reads)
+    print("total bp:\t%d" % length_sum)
+    print("coverage (E. Coli):\t%f" % (length_sum/5.4*1000000))
 
 
 if __name__ == "__main__":
