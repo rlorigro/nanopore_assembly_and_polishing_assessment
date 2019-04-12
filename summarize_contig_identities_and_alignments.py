@@ -745,6 +745,12 @@ def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
     total_reverse_deletes = 0
     total_reverse_ref_length = 0
     total_reverse_read_length = 0
+    total_matches = 0
+    total_mismatches = 0
+    total_inserts = 0
+    total_deletes = 0
+    total_ref_length = 0
+    total_read_length = 0
 
     csv_rows.append(["chromosome_name"])
     csv_rows.append(["chromosome_length"])
@@ -779,9 +785,19 @@ def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
         total_reverse_deletes += data[REVERSE_DELETES]
         total_reverse_ref_length += data[REVERSE_REF_LENGTH]
         total_reverse_read_length += data[REVERSE_READ_LENGTH]
+        total_matches += data[REVERSE_MATCHES] + data[FORWARD_MATCHES]
+        total_mismatches += data[REVERSE_MISMATCHES] + data[FORWARD_MISMATCHES]
+        total_inserts += data[REVERSE_INSERTS] + data[FORWARD_INSERTS]
+        total_deletes += data[REVERSE_DELETES] + data[FORWARD_DELETES]
+        total_ref_length += data[REVERSE_REF_LENGTH] + data[FORWARD_REF_LENGTH]
+        total_read_length += data[REVERSE_READ_LENGTH] + data[FORWARD_READ_LENGTH]
 
         for i in range(REVERSE_ALIGNMENT_IDENTITY + 1):
             csv_rows[i].append(data[i])
+
+    mismatch_rate = total_mismatches / total_ref_length
+    delete_rate = total_deletes / total_ref_length
+    insert_rate = total_inserts / total_ref_length
 
     # Transpose
     csv_rows = list(map(list, zip(*csv_rows)))
@@ -827,6 +843,15 @@ def export_genome_summary_to_csv(bam_path, output_dir, genome_data):
     csv_rows.append(["total_reverse_read_length", total_reverse_read_length])
     csv_rows.append(["total_reverse_alignment_identity", total_reverse_alignment_identity])
     csv_rows.append(["total_reverse_sequence_identity", total_reverse_sequence_identity])
+    csv_rows.append(["total_matches", total_matches])
+    csv_rows.append(["total_mismatches", total_mismatches])
+    csv_rows.append(["total_inserts", total_inserts])
+    csv_rows.append(["total_deletes", total_deletes])
+    csv_rows.append(["total_ref_length", total_ref_length])
+    csv_rows.append(["total_read_length", total_read_length])
+    csv_rows.append(["mismatch_rate (per base in reference)", mismatch_rate])
+    csv_rows.append(["delete_rate (per base in reference)", delete_rate])
+    csv_rows.append(["insert_rate (per base in reference)", insert_rate])
 
     filename = os.path.basename(bam_path)
     filename_prefix = ".".join(filename.split(".")[:-1])
