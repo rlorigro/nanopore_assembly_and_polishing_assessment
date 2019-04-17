@@ -665,15 +665,15 @@ def parse_reads(reads, chromosome_name, chromosome_length, fasta_handler):
             if reversal_status:
                 chromosome_reverse_matches += n_total_matches
                 chromosome_reverse_mismatches += n_total_mismatches
-                chromosome_reverse_inserts += n_total_deletes
-                chromosome_reverse_deletes += n_total_inserts
+                chromosome_reverse_inserts += n_total_inserts
+                chromosome_reverse_deletes += n_total_deletes
                 chromosome_reverse_ref_length += ref_length
                 chromosome_reverse_read_length += read_length
             else:
                 chromosome_forward_matches += n_total_matches
                 chromosome_forward_mismatches += n_total_mismatches
-                chromosome_forward_inserts += n_total_deletes
-                chromosome_forward_deletes += n_total_inserts
+                chromosome_forward_inserts += n_total_inserts
+                chromosome_forward_deletes += n_total_deletes
                 chromosome_forward_ref_length += ref_length
                 chromosome_forward_read_length += read_length
 
@@ -1084,7 +1084,7 @@ if __name__ == "__main__":
         "--max_threads", "-t",
         type=int,
         required=False,
-        help="FASTA file path of true reference to be compared against"
+        help="total number of vCPU to allocate to this job"
     )
 
     args = parser.parse_args()
