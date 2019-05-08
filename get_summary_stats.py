@@ -32,8 +32,6 @@ def get_chromosome_stats(genome_data, reference_path, chromosome_name, start, st
                                      chromosome_name=chromosome_name)
 
 
-
-
 def process_bam(bam_path, reference_path, max_threads, output_dir=None):
     """
     Find useful summary data from a bam that can be represented as a table of identities/matches/mismatches/indels

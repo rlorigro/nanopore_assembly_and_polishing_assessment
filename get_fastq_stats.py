@@ -11,8 +11,8 @@ Iterate a fastq file and find the read length distribution, as well as cumulativ
 
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/subsampled/30x/r94_ec_rad2.30x.fastq"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.first50k.fastq"
-# READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.fastq"
-READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_first_410k.fastq"
+READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.fastq"
+# READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_first_410k.fastq"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_last_410k.fastq"
 # READS_PATH = "/home/ryan/Downloads/r94_ec_rad2.30x.fastq"
 
@@ -89,7 +89,7 @@ def main():
 
     print_stats(step=step, frequencies=frequencies, n_reads=n_reads)
     print("total bp:\t%d" % length_sum)
-    print("coverage (E. Coli):\t%f" % (length_sum/5.4*1000000))
+    print("coverage (E. Coli):\t%f" % (length_sum/(5.4*1000000)))
 
 
 if __name__ == "__main__":

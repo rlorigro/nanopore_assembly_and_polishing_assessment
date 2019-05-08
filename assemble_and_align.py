@@ -6,7 +6,7 @@ import argparse
 
 def main(reads_file_path, genome_size=None, output_dir=None):
     if output_dir is None:
-        output_dir = "./"
+        output_dir = "./output/"
     else:
         FileManager.ensure_directory_exists(output_dir)
 
