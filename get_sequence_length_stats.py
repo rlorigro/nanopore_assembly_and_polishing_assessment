@@ -1,6 +1,7 @@
 import sys
 from collections import defaultdict
 from handlers.FastqReader import FastqReader
+from handlers.FastaHandler import FastaHandler
 from matplotlib import pyplot
 import numpy
 
@@ -11,7 +12,8 @@ Iterate a fastq file and find the read length distribution, as well as cumulativ
 
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/subsampled/30x/r94_ec_rad2.30x.fastq"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.first50k.fastq"
-READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.fastq"
+# READS_PATH = "/home/ryan/data/Nanopore/ecoli/miten/guppy/r94_ec_guppy.fastq"
+READS_PATH = "/home/ryan/data/Nanopore/Human/paolo/LC2019/shasta_assembly_GM24143.fasta"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_first_410k.fastq"
 # READS_PATH = "/home/ryan/data/Nanopore/ecoli/flapppie/03_22_19_R941_gEcoli_last_410k.fastq"
 # READS_PATH = "/home/ryan/Downloads/r94_ec_rad2.30x.fastq"
@@ -50,16 +52,24 @@ def print_stats(step, frequencies, n_reads):
 
 
 def main():
-    parser = FastqReader()
+    if READS_PATH.endswith(".fastq"):
+        reads = FastqReader().iterate_file(path=READS_PATH)
+    elif READS_PATH.endswith(".fasta"):
+        reads = FastaHandler(READS_PATH).iterate_file()
+    else:
+        exit("Improper file format: %s" % READS_PATH)
 
     n_reads = 0
     lengths = list()
     length_sum = 0
 
-    for i, item in enumerate(parser.iterate_file(path=READS_PATH)):
+    for i, item in enumerate(reads):
         n_reads += 1
 
-        header, sequence, quality = item
+        if READS_PATH.endswith(".fastq"):
+            header, sequence, quality = item
+        elif READS_PATH.endswith(".fasta"):
+            header, sequence = item
 
         # print()
         # print(header)
