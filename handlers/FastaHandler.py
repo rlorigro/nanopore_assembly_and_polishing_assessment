@@ -43,6 +43,10 @@ class FastaHandler:
     def get_contig_names(self):
         return self.fasta.references
 
+    def iterate_file(self):
+        for name in self.fasta.references:
+            yield name, self.fasta.fetch(region=name, start=None, end=None)
+
     def get_ref_of_region(self, contig, site):
         """
         Return a string containing reference of a site

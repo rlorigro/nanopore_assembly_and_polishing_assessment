@@ -1,8 +1,11 @@
+from modules.entropy import calculate_shannon_entropy, find_longest_repeat
+from modules.sort import sort_chromosome_names, sort_summary_data
 from handlers.BamHandler import BamHandler
 from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
 from collections import defaultdict
 import argparse
+import math
 import csv
 import os
 
@@ -12,15 +15,22 @@ Generate stats/plots on contig identity and alignment given a BAM of contigs VS 
 
 
 # headers and indexes for indel data vectors
-DATA_INDEXES = {"chromosome_name": 0,
-                "cigar_type": 1,
-                "ref_start": 2,
-                "ref_stop": 3,
-                "ref_allele": 4,
-                "read_start": 5,
-                "read_stop": 6,
-                "read_allele": 7,
-                "reversal_status": 8}
+DATA_INDEXES = {"sequence_name": 0,
+                "chromosome_name": 1,
+                "cigar_type": 2,
+                "ref_start": 3,
+                "ref_stop": 4,
+                "ref_allele": 5,
+                "ref_allele_context": 6,
+                "read_start": 7,
+                "read_stop": 8,
+                "read_allele": 9,
+                "read_allele_context": 10,
+                "reversal_status": 11,
+                "ref_window": 12,
+                "entropy": 13,
+                "max_repeat": 14,
+                "is_runlength_error": 15}
 
 
 MISMATCH_INDEXES = {"ref_allele": 0,
@@ -145,7 +155,7 @@ def get_read_stop_position(read):
     return ref_alignment_stop
 
 
-def parse_reads(reads, chromosome_name, fasta_handler):
+def parse_reads(reads, chromosome_name, fasta_handler, homopolymer_window_size=11):
     """
     Given a set of pysam read objects, generate data for matches/mismatches/inserts/deletes and contig size/position for
     each read
@@ -154,6 +164,9 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     :param fasta_handler: fasta_handler object that can retrieve substrings from the reference sequence
     :return:
     """
+    left_pad = math.floor((homopolymer_window_size - 1)/2)
+    right_pad = math.ceil((homopolymer_window_size - 1)/2) + 1
+
     inserts = defaultdict(list)
     deletes = defaultdict(list)
     mismatches = defaultdict(list)
@@ -163,7 +176,7 @@ def parse_reads(reads, chromosome_name, fasta_handler):
     for read in reads:
         if read.is_secondary:
             n_secondary += 1
-            print(read.query_name, n_secondary)
+            # print(read.query_name, n_secondary)
 
         if read.mapping_quality > 0 and not read.is_secondary:
             ref_alignment_start = read.reference_start
@@ -236,7 +249,24 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                         ref_allele = mismatch[MISMATCH_INDEXES["ref_allele"]]
                         read_allele = mismatch[MISMATCH_INDEXES["read_allele"]]
 
-                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+                        left_index = mismatch[MISMATCH_INDEXES["ref_start"]] - left_pad
+                        right_index = mismatch[MISMATCH_INDEXES["ref_start"]] + right_pad
+
+                        left_index = max(0, left_index)
+                        right_index = min(len(ref_sequence), right_index)
+
+                        ref_window = ref_sequence[left_index:right_index]
+
+                        entropy = round(calculate_shannon_entropy(ref_window),3)
+                        max_repeat = find_longest_repeat(ref_window)
+
+                        is_runlength_error = False
+
+                        ref_allele_context = ref_sequence[mismatch[MISMATCH_INDEXES["ref_start"]] - 1:mismatch[MISMATCH_INDEXES["ref_start"]] + 2]
+                        read_allele_context = read_sequence[mismatch[MISMATCH_INDEXES["read_start"]] - 1:mismatch[MISMATCH_INDEXES["read_start"]] + 2]
+
+                        data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, ref_allele_context, read_start, read_stop,
+                                read_allele, read_allele_context, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                         mismatches[read_id].append(data)
 
@@ -244,15 +274,40 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                     # insert
                     cigar_type = "INS"
 
-                    ref_start = ref_index
-                    ref_stop = ref_index + ref_index_increment
+                    ref_start = ref_alignment_start + ref_index
+                    ref_stop = ref_alignment_start + ref_index + ref_index_increment
                     read_start = read_index
                     read_stop = read_index + read_index_increment
 
                     read_allele = read_sequence[read_start:read_stop]
-                    ref_allele = ref_sequence[ref_start:ref_stop]
+                    ref_allele = ref_sequence[ref_index:ref_index + ref_index_increment]
 
-                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+                    left_index = max(0, ref_index - left_pad)
+                    right_index = min(len(ref_sequence), ref_index + right_pad)
+
+                    ref_window = ref_sequence[left_index:right_index]
+
+                    entropy = round(calculate_shannon_entropy(ref_window), 3)
+                    max_repeat = find_longest_repeat(ref_window)
+
+                    is_runlength_error = False
+
+                    characters = set(read_allele)
+                    if len(characters) == 1:
+                        if read_allele[0] == ref_sequence[ref_index-1] or read_allele[-1] == ref_sequence[ref_index]:
+                            is_runlength_error = True
+
+                    # print("INSERT")
+                    # print("REF\t",ref_sequence[ref_index-1:ref_index + 1])
+                    # print("READ\t", read_sequence[read_index-1:read_index+read_index_increment+1])
+                    # print(is_runlength_error)
+                    # print()
+
+                    ref_allele_context = ref_sequence[ref_index-1:ref_index + 1]
+                    read_allele_context = read_sequence[read_index-1:read_index+read_index_increment+1]
+
+                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, ref_allele_context, read_start, read_stop,
+                            read_allele, read_allele_context, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                     inserts[read_id].append(data)
 
@@ -260,15 +315,40 @@ def parse_reads(reads, chromosome_name, fasta_handler):
                     # delete or refskip
                     cigar_type = "DEL"
 
-                    ref_start = ref_index
-                    ref_stop = ref_index + ref_index_increment
+                    ref_start = ref_alignment_start + ref_index
+                    ref_stop = ref_alignment_start + ref_index + ref_index_increment
                     read_start = read_index
                     read_stop = read_index + read_index_increment
 
                     read_allele = read_sequence[read_start:read_stop]
-                    ref_allele = ref_sequence[ref_start:ref_stop]
+                    ref_allele = ref_sequence[ref_index:ref_index + ref_index_increment]
 
-                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, read_start, read_stop, read_allele, reversal_status]
+                    left_index = max(0, ref_index - left_pad)
+                    right_index = min(len(ref_sequence), ref_index + right_pad)
+
+                    ref_window = ref_sequence[left_index:right_index]
+
+                    entropy = round(calculate_shannon_entropy(ref_window), 3)
+                    max_repeat = find_longest_repeat(ref_window)
+
+                    is_runlength_error = False
+
+                    characters = set(ref_allele)
+                    if len(characters) == 1:
+                        if ref_allele[0] == read_sequence[read_index-1] or ref_allele[-1] == read_sequence[read_stop]:
+                            is_runlength_error = True
+
+                    # print("DELETE")
+                    # print("REF\t",ref_sequence[ref_index-1:ref_index+ref_index_increment+1])
+                    # print("READ\t",read_sequence[read_start-1:read_stop+1])
+                    # print(is_runlength_error)
+                    # print()
+
+                    ref_allele_context = ref_sequence[ref_index-1:ref_index+ref_index_increment+1]
+                    read_allele_context = read_sequence[read_start-1:read_stop+1]
+
+                    data = [chromosome_name, cigar_type, ref_start, ref_stop, ref_allele, ref_allele_context, read_start, read_stop,
+                            read_allele, read_allele_context, reversal_status, ref_window, entropy, max_repeat, is_runlength_error]
 
                     deletes[read_id].append(data)
 
@@ -321,10 +401,11 @@ def write_hashed_lists_to_csv(data, output_path):
 
     with open(output_path, "w") as file:
         headers = [item[0] for item in sorted(DATA_INDEXES.items(), key=lambda x: x[1])]
+
         header_line = ",".join(headers) + "\n"
         file.write(header_line)
 
-        for key in data:
+        for key in sort_chromosome_names(data.keys()):
             for element in data[key]:
                 line = [str(key)] + list(map(str,element))  # prepend the key name
                 line = ",".join(line) + "\n"
@@ -392,10 +473,13 @@ def process_bam(bam_path, reference_path, output_dir=None):
     fasta_handler = FastaHandler(reference_path)
 
     chromosome_names = fasta_handler.get_contig_names()
+    chromosome_names = sort_chromosome_names(names=chromosome_names, prefix="chr")
 
-    print(chromosome_names)
+    print("ref contig names:", chromosome_names)
 
     for chromosome_name in chromosome_names:
+        print("Parsing alignments for ref contig:", chromosome_name)
+
         chromosome_length = fasta_handler.get_chr_sequence_length(chromosome_name)
 
         start = 0

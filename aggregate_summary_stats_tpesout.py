@@ -23,11 +23,27 @@ ALIGNMENT_LENGTH = 4
 READ_LENGTH = 5
 CONTIG_LENGTH = 6
 N_INITIAL_CLIPPED_BASES = 7
-N_MATCHES = 8
-N_TOTAL_MISMATCHES = 9
-N_TOTAL_DELETES = 10
-N_TOTAL_INSERTS = 11
-IDENTITY = 12
+N_MATCHES = 9
+N_TOTAL_MISMATCHES = 10
+N_TOTAL_DELETES = 11
+N_TOTAL_INSERTS = 12
+IDENTITY = 14
+
+# chromosome_name,
+# read_id,
+# reversal_status,
+# ref_alignment_start,
+# ref_alignment_stop,
+# ref_length,
+# read_length,
+# contig_length,
+# n_initial_clipped_bases,
+# n_total_matches,
+# n_total_mismatches,
+# n_total_deletes,
+# n_total_inserts,
+# sequence_identity,
+# alignment_identity
 
 
 def plot_distribution(step, bins, frequencies, save_location=None, title=None):
@@ -117,6 +133,8 @@ def aggregate_summary_data(summary_file_paths, args):
 
     for p,path in enumerate(summary_file_paths):
         filename = os.path.basename(path)
+
+        if "whole_genome" in filename: continue
         chromosome_name = get_chromosome_name_from_path(path)
 
         file_summary_headers = ["chromosome_name", "summary_filename"]  # These are not part of the file contents
@@ -160,7 +178,9 @@ def aggregate_summary_data(summary_file_paths, args):
 
                     # Summary data (the good part)
                     file_summary_data.append(line[-1])
-                    global_summary_dict[line[0]] += int(float((line[-1].strip())))
+
+                    #TODO
+                    # global_summary_dict[line[0]] += int(float((line[-1].strip())))
 
         if summary_headers is None:
             summary_headers = file_summary_headers
@@ -177,7 +197,7 @@ def aggregate_summary_data(summary_file_paths, args):
     g_n_mismatches = int(global_summary_dict['total_reverse_mismatches'] + global_summary_dict['total_forward_mismatches'])
     g_n_deletes = int(global_summary_dict['total_reverse_deletes'] + global_summary_dict['total_forward_deletes'])
     g_n_inserts = int(global_summary_dict['total_reverse_inserts'] + global_summary_dict['total_forward_inserts'])
-    g_identity = 1.0 * g_n_matches / (g_n_matches + g_n_mismatches + g_n_deletes + g_n_inserts)
+    g_identity = 0 #TODO 1.0 * g_n_matches / (g_n_matches + g_n_mismatches + g_n_deletes + g_n_inserts)
     global_summary_dict['total_identity'] = g_identity
     global_summary_dict['forward_coverage_estimate'] = -1
     global_summary_dict['reverse_coverage_estimate'] = -1
@@ -311,14 +331,30 @@ def plot_per_file_identity_violin(raw_identities_per_file, output_base=None, tit
     identities_per_file = merge_dicts_by_key_idx(raw_identities_per_file, key_start_pos=8, key_end_pos=15, basename=True)
 
     # sort keys and values together
-    sorted_keys, sorted_vals = zip(*sorted(identities_per_file.items(), key=op.itemgetter(1)))
+    sorted_keys, sorted_vals = zip(*sorted(identities_per_file.items(), key=op.itemgetter(0)))
+
+    samples = ["03492", "03098", "02723", "02080", "02055", "01243", "01109", "00733", "24385", "24149", "24143", 'CHM13']
+
+    colors = [(175 / 256.0, 48 / 256.0, 51 / 256.0),  # red
+              (224 / 256.0, 99 / 256.0, 58 / 256.0),  # orange
+              (215 / 256.0, 219 / 256.0, 84 / 256.0),  # yellow
+              (110 / 256.0, 170 / 256.0, 100 / 256.0),  # light green
+              (80 / 256.0, 180 / 256.0, 150 / 256.0),  # green
+              (100 / 256.0, 189 / 256.0, 197 / 256.0),  # green-blue
+              (0 / 256.0, 170 / 256.0, 231 / 256.0),  # turquoise
+              (51 / 256.0, 87 / 256.0, 182 / 256.0),  # blue
+              (37 / 256.0, 36 / 256.0, 93 / 256.0),  # indigo
+              (95 / 256.0, 51 / 256.0, 139 / 256.0),  # purple
+              (200 / 256.0, 53 / 256.0, 93 / 256.0),  # pink
+    ]
 
     # print mmm
     for key in sorted_keys:
         mmm(identities_per_file[key], identifier=key)
 
+    # sns.set_palette(sns.husl_palette(len(sorted_keys)))
     sns.set(style='white')
-    ax = sns.violinplot(data=sorted_vals, inner=None, linewidth=0, cut=0)
+    ax = sns.violinplot(data=sorted_vals, inner=None, linewidth=0, cut=0, palette=sns.color_palette("husl", 8))
     pyplot.setp(ax.collections, alpha=.8)
 
     # category labels
@@ -485,6 +521,9 @@ def main(summary_glob, output_dir, filter_decoys, args):
     # all_read_lengths.sort()
     # print("top 15 read lengths: {}".format(all_read_lengths[:-15]))
 
+
+    for file in identities_per_file.keys():
+        mmm(identities_per_file[file], file)
     mmm(identities, "All Data")
 
     sample_name = args.sample
@@ -492,10 +531,10 @@ def main(summary_glob, output_dir, filter_decoys, args):
         sample_name = summary_glob.rstrip('/').replace('/', "_").replace('*', "_")  # replace this with sample name extractor function?
 
     # save to file
-    write_chromosomal_summary_data_to_csv(summary_headers=summary_headers,
-                                          summary_data=summary_data,
-                                          sample_name=sample_name,
-                                          output_dir=output_dir)
+    # write_chromosomal_summary_data_to_csv(summary_headers=summary_headers,
+    #                                       summary_data=summary_data,
+    #                                       sample_name=sample_name,
+    #                                       output_dir=output_dir)
 
     # plots
     if args.plot:
@@ -503,9 +542,9 @@ def main(summary_glob, output_dir, filter_decoys, args):
 
         # plot_identity_histogram(identities, title=sample_name, output_location=os.path.join(output_dir, "{}.all_identities.png".format(sample_name)))
         # plot_read_len_to_identity(read_len_to_identity, title=sample_name, output_base=os.path.join(output_dir, "{}.read_len_to_identity".format(sample_name)))
-        # plot_per_file_identity_violin(identities_per_file, title=sample_name,
-        #                               output_base=os.path.join(output_dir, sample_name))
-        plot_per_file_identity_curve(identities_per_file, output_base=os.path.join(output_dir, sample_name))
+        plot_per_file_identity_violin(identities_per_file, title=sample_name,
+                                      output_base=os.path.join(output_dir, sample_name))
+        # plot_per_file_identity_curve(identities_per_file, output_base=os.path.join(output_dir, sample_name))
         # if args.comparison_glob is not None:
         #     comparison_paths = glob.glob(args.comparison_glob)
         #     if len(comparison_paths) == 0:

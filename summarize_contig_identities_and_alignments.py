@@ -1,6 +1,7 @@
 from handlers.BamHandler import BamHandler
 from handlers.FastaHandler import FastaHandler
 from handlers.FileManager import FileManager
+from multiprocessing import cpu_count, Pool
 from matplotlib import pyplot, patches
 from collections import defaultdict
 import argparse
@@ -97,7 +98,7 @@ def read_gap_table(table_path, target_chromosome_name, size_cutoff=0):
     return coordinates
 
 
-def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, alignment_length, scale, color, contig_length):
+def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, alignment_length, scale, color, contig_length, draw_divider):
     """
     Given relevant data about a contig, generate a plot showing how it aligns to the chromosome
     :param axes:
@@ -118,6 +119,13 @@ def plot_contig_blocks(axes, y, ref_alignment_start, n_initial_clipped_bases, al
 
     rect = patches.Rectangle((x, y), width, height, color=color)
     axes.add_patch(rect)
+
+    # ---- If the block is a supplementary extension to another block ----
+    # ---- draw a line to show this ----
+
+    if draw_divider:
+        print("supplementary!", x, y)
+        axes.plot([x,x], [y-0.1,y+height+0.1], linestyle=(0, (1, 1)), color=[0.5,0.5,0.5])
 
     # ---- plot left side clipped block ----
 
@@ -167,7 +175,7 @@ def plot_windows(figure, axes, coordinates, scale, y_min, y_max, color):
 
 def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, total_identity, bam_path,
                  centromere_coordinates, gap_coordinates, segdup_coordinates, y_min=None, y_max=None,
-                 save=True, show=False):
+                 save=True, show=False, group_supplementaries=False):
     """
     Create a figure showing how contigs align to the reference chromosome and what their identities are
     :param output_dir: where to save figures
@@ -228,17 +236,18 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
         found_suitable_lane = False
         l = 0
 
-        if read_id in contig_positions:
-            for l,lane in enumerate(contig_positions[read_id]):
-                x,y = lane
+        if group_supplementaries:
+            if read_id in contig_positions:
+                for l,lane in enumerate(contig_positions[read_id]):
+                    x,y = lane
 
-                x_current = ref_alignment_start / scale
+                    x_current = ref_alignment_start / scale
 
-                if x_current > x:
-                    position = [x_current, y]
-                    contig_positions[read_id][l] = position
-                    found_suitable_lane = True
-                    break
+                    if x_current > x:
+                        position = [x_current, y]
+                        contig_positions[read_id][l] = position
+                        found_suitable_lane = True
+                        break
 
         if reversal_status:
             color = [77.6, 39.6, 7.1]
@@ -263,7 +272,8 @@ def plot_contigs(output_dir, read_data, chromosome_name, chromosome_length, tota
                                                  alignment_length=alignment_length,
                                                  scale=scale,
                                                  color=color,
-                                                 contig_length=contig_length)
+                                                 contig_length=contig_length,
+                                                 draw_divider=False)
 
         # print(l, contig_positions)
         if not found_suitable_lane:
@@ -476,7 +486,7 @@ def get_read_stop_position(read):
     return ref_alignment_stop
 
 
-def parse_reads(reads, chromosome_name, fasta_handler, max_indel_length=50, min_total_alignment_ratio=0.95):
+def parse_reads(reads, chromosome_name, fasta_handler):
     """
     Given a set of pysam read objects, generate data for matches/mismatches/inserts/deletes and contig size/position for
     each read
@@ -488,118 +498,99 @@ def parse_reads(reads, chromosome_name, fasta_handler, max_indel_length=50, min_
     read_data = list()
 
     n_secondary = 0
-    n_supplementary = 0
-    n_zero_qual = 0
 
     for read in reads:
         if read.is_secondary:
             n_secondary += 1
-            continue
 
-        if read.is_supplementary:
-            n_supplementary += 1
-            continue
+        if read.mapping_quality > 0 and not read.is_secondary:
+            ref_alignment_start = read.reference_start
+            ref_alignment_stop = get_read_stop_position(read)
+            ref_length = ref_alignment_stop - ref_alignment_start
 
-        if read.mapping_quality == 0:
-            n_zero_qual += 1
-            continue
+            reversal_status = read.is_reverse
 
-        ref_alignment_start = read.reference_start
-        ref_alignment_stop = get_read_stop_position(read)
-        ref_length = ref_alignment_stop - ref_alignment_start
+            ref_sequence = fasta_handler.get_sequence(chromosome_name=chromosome_name,
+                                                      start=ref_alignment_start,
+                                                      stop=ref_alignment_stop + 10)
 
-        reversal_status = read.is_reverse
+            cigar_tuples = read.cigartuples
+            read_sequence = read.query_sequence
+            read_length = len(read_sequence)
+            contig_length = read.infer_read_length()
 
-        cigar_tuples = read.cigartuples
-        read_sequence = read.query_sequence
-        read_length = len(read_sequence)
-        contig_length = read.infer_read_length()
+            read_id = read.query_name
+            # read_quality = read.query_qualities
 
-        if min_total_alignment_ratio is not None and ref_length < read_length * min_total_alignment_ratio:
-            continue
+            # read_index: index of read sequence
+            # ref_index: index of reference sequence
+            read_index = 0
+            ref_index = 0
+            found_valid_cigar = False
 
-        ref_sequence = fasta_handler.get_sequence(chromosome_name=chromosome_name,
-                                                  start=ref_alignment_start,
-                                                  stop=ref_alignment_stop + 10)
+            n_total_matches = 0
+            n_total_mismatches = 0
+            n_total_deletes = 0
+            n_total_inserts = 0
 
-        read_id = read.query_name
-        # read_quality = read.query_qualities
+            n_initial_clipped_bases = 0
 
-        # read_index: index of read sequence
-        # ref_index: index of reference sequence
-        read_index = 0
-        ref_index = 0
-        found_valid_cigar = False
+            for c, cigar in enumerate(cigar_tuples):
+                cigar_code = cigar[0]
+                length = cigar[1]
 
-        n_total_matches = 0
-        n_total_mismatches = 0
-        n_total_deletes = 0
-        n_total_inserts = 0
+                # get the sequence segments that are effected by this operation
+                read_sequence_segment = read_sequence[read_index:read_index + length]
+                ref_sequence_segment = ref_sequence[ref_index:ref_index+length]
 
-        n_initial_clipped_bases = 0
+                # skip parsing the first segment if it is not a match
+                if cigar_code != 0 and found_valid_cigar is False:
+                    # only increment the read index if the non-match cigar code is INS or SOFTCLIP
+                    if cigar_code == 1 or cigar_code == 4:
+                        read_index += length
+                    if cigar_code == 5 or cigar_code == 4:
+                        n_initial_clipped_bases = length
+                    continue
 
-        for c, cigar in enumerate(cigar_tuples):
-            cigar_code = cigar[0]
-            length = cigar[1]
+                found_valid_cigar = True
 
-            # get the sequence segments that are effected by this operation
-            read_sequence_segment = read_sequence[read_index:read_index + length]
-            ref_sequence_segment = ref_sequence[ref_index:ref_index+length]
+                # send the cigar tuple to get attributes we got by this operation
+                ref_index_increment, read_index_increment, n_matches, n_mismatches, n_deletes, n_inserts = \
+                    parse_cigar_tuple(cigar_code=cigar_code,
+                                      length=length,
+                                      alignment_position=ref_alignment_start + ref_index,
+                                      read_sequence=read_sequence_segment,
+                                      ref_sequence=ref_sequence_segment)
 
-            # skip parsing the first segment if it is not a match
-            if cigar_code != 0 and found_valid_cigar is False:
-                # only increment the read index if the non-match cigar code is INS or SOFTCLIP
-                if cigar_code == 1 or cigar_code == 4:
-                    read_index += length
-                if cigar_code == 5 or cigar_code == 4:
-                    n_initial_clipped_bases = length
-                continue
+                # increase the read index iterator
+                read_index += read_index_increment
+                ref_index += ref_index_increment
+                n_total_matches += n_matches
+                n_total_mismatches += n_mismatches
+                n_total_deletes += n_deletes
+                n_total_inserts += n_inserts
 
-            found_valid_cigar = True
+            # total_non_matches = n_total_mismatches + n_total_deletes + n_total_inserts
+            total_non_matches = 2*n_total_mismatches + n_total_deletes + n_total_inserts
 
-            if max_indel_length is not None and cigar_code in (1, 2) and length >= max_indel_length:
-                continue
+            # identity = (ref_length - total_non_matches) / ref_length
+            identity = (ref_length + read_length - total_non_matches) / (ref_length + read_length)
 
-            # send the cigar tuple to get attributes we got by this operation
-            ref_index_increment, read_index_increment, n_matches, n_mismatches, n_deletes, n_inserts = \
-                parse_cigar_tuple(cigar_code=cigar_code,
-                                  length=length,
-                                  alignment_position=ref_alignment_start + ref_index,
-                                  read_sequence=read_sequence_segment,
-                                  ref_sequence=ref_sequence_segment)
+            data = [read_id,
+                    reversal_status,
+                    ref_alignment_start,
+                    ref_alignment_stop,
+                    ref_length,
+                    read_length,
+                    contig_length,
+                    n_initial_clipped_bases,
+                    n_total_matches,
+                    n_total_mismatches,
+                    n_total_deletes,
+                    n_total_inserts,
+                    identity]
 
-            # increase the read index iterator
-            read_index += read_index_increment
-            ref_index += ref_index_increment
-            n_total_matches += n_matches
-            n_total_mismatches += n_mismatches
-            n_total_deletes += n_deletes
-            n_total_inserts += n_inserts
-
-        # total_non_matches = n_total_mismatches + n_total_deletes + n_total_inserts
-        total_non_matches = 2*n_total_mismatches + n_total_deletes + n_total_inserts
-
-        # identity = (ref_length - total_non_matches) / ref_length
-        identity = (ref_length + read_length - total_non_matches) / (ref_length + read_length)
-
-        if identity < .75: continue
-
-        data = [chromosome_name,
-                read_id,
-                reversal_status,
-                ref_alignment_start,
-                ref_alignment_stop,
-                ref_length,
-                read_length,
-                contig_length,
-                n_initial_clipped_bases,
-                n_total_matches,
-                n_total_mismatches,
-                n_total_deletes,
-                n_total_inserts,
-                identity]
-
-        read_data.append(data)
+            read_data.append(data)
 
     return read_data
 
@@ -702,6 +693,12 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
     csv_rows.append(["total_reverse_alignment_length",total_reverse_alignment_length])
     csv_rows.append(["reverse_coverage_estimate",total_reverse_alignment_length / chromosome_length])
 
+    total_forward_conventional_identity = total_forward_matches / (total_forward_matches + total_forward_mismatches + total_forward_inserts + total_forward_deletes)
+    total_reverse_conventional_identity = total_reverse_matches / (total_reverse_matches + total_reverse_mismatches + total_reverse_inserts + total_reverse_deletes)
+
+    csv_rows.append(["total_forward_conventional_identity", total_forward_conventional_identity])
+    csv_rows.append(["total_reverse_conventional_identity", total_reverse_conventional_identity])
+
     filename = os.path.basename(bam_path+"_"+chromosome_name)
     filename_prefix = ".".join(filename.split(".")[:-1])
     output_filename = "summary_" + filename_prefix + "_" + chromosome_name + ".csv"
@@ -715,7 +712,72 @@ def export_summaries_to_csv(read_data, total_identity, chromosome_length, output
             writer.writerow(row)
 
 
-def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path=None, gap_table_path=None, segdup_table_path=None):
+def get_chromosome_data(bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path):
+    fasta_handler = FastaHandler(reference_path)
+    bam_handler = BamHandler(bam_file_path=bam_path)
+
+    chromosome_length = fasta_handler.get_chr_sequence_length(chromosome_name)
+
+    start = 0
+    stop = chromosome_length
+
+    reads = bam_handler.get_reads(chromosome_name=chromosome_name, start=start, stop=stop)
+
+    read_data = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
+
+    total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
+    total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
+
+    # Calculate total identity, and approximate 0 if denominator is zero
+    total_identity = total_weighted_identity / max(1e-9, total_alignment_bases)
+    total_identity = round(total_identity, 6)
+
+    # print_read_summaries(read_data=read_data,
+    #                      total_identity=total_identity,
+    #                      chromosome_name=chromosome_name,
+    #                      chromosome_length=chromosome_length)
+
+    export_summaries_to_csv(read_data=read_data,
+                            total_identity=total_identity,
+                            chromosome_length=chromosome_length,
+                            output_dir=output_dir,
+                            bam_path=bam_path,
+                            chromosome_name=chromosome_name)
+
+    if centromere_table_path is not None:
+        centromere_coordinates = read_centromere_table(centromere_table_path=centromere_table_path,
+                                                       target_chromosome_name=chromosome_name)
+    else:
+        centromere_coordinates = None
+
+    if gap_table_path is not None:
+        gap_coordinates = read_gap_table(table_path=gap_table_path,
+                                         target_chromosome_name=chromosome_name)
+    else:
+        gap_coordinates = None
+
+    if segdup_table_path is not None:
+        segdup_coordinates = read_gap_table(table_path=segdup_table_path,
+                                            target_chromosome_name=chromosome_name,
+                                            size_cutoff=10000)
+    else:
+        segdup_coordinates = None
+
+    figure, axes = plot_contigs(output_dir=output_dir,
+                                read_data=read_data,
+                                chromosome_name=chromosome_name,
+                                chromosome_length=chromosome_length,
+                                total_identity=total_identity,
+                                bam_path=bam_path,
+                                centromere_coordinates=centromere_coordinates,
+                                gap_coordinates=gap_coordinates,
+                                segdup_coordinates=segdup_coordinates,
+                                show=False)
+
+    pyplot.close(figure)
+
+
+def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path=None, gap_table_path=None, segdup_table_path=None, max_threads=None):
     """
     Find useful summary data from a bam that can be represented as a table of identities, and a plot of alignments
     :param bam_path: path to a bam containing contigs aligned to a true reference
@@ -725,84 +787,41 @@ def process_bam(bam_path, reference_path, output_dir=None, centromere_table_path
     """
     print("\n" + bam_path)
 
+    if max_threads is None:
+        max_threads = max(1, cpu_count() - 2)
+
     if output_dir is None:
         output_dir = "plots/"
 
     FileManager.ensure_directory_exists(output_dir)
 
-    bam_handler = BamHandler(bam_file_path=bam_path)
     fasta_handler = FastaHandler(reference_path)
 
     chromosome_names = fasta_handler.get_contig_names()
 
+    arguments = list()
+
     for chromosome_name in chromosome_names:
-        chromosome_length = fasta_handler.get_chr_sequence_length(chromosome_name)
+        arguments.append([bam_path, reference_path, chromosome_name, output_dir, centromere_table_path, gap_table_path, segdup_table_path])
 
-        start = 0
-        stop = chromosome_length
+    if len(arguments) < max_threads:
+        max_threads = len(arguments)
 
-        reads = bam_handler.get_reads(chromosome_name=chromosome_name, start=start, stop=stop)
+    print("Using %d threads..." % max_threads)
 
-        read_data = parse_reads(reads=reads, fasta_handler=fasta_handler, chromosome_name=chromosome_name)
-
-        total_weighted_identity = sum([x[ALIGNMENT_LENGTH] * x[IDENTITY] for x in read_data])
-        total_alignment_bases = sum([x[ALIGNMENT_LENGTH] for x in read_data])
-
-        # Calculate total identity, and approximate 0 if denominator is zero
-        total_identity = total_weighted_identity / max(1e-9, total_alignment_bases)
-        total_identity = round(total_identity, 6)
-
-        # print_read_summaries(read_data=read_data,
-        #                      total_identity=total_identity,
-        #                      chromosome_name=chromosome_name,
-        #                      chromosome_length=chromosome_length)
-
-        export_summaries_to_csv(read_data=read_data,
-                                total_identity=total_identity,
-                                chromosome_length=chromosome_length,
-                                output_dir=output_dir,
-                                bam_path=bam_path,
-                                chromosome_name=chromosome_name)
-
-        if centromere_table_path is not None:
-            centromere_coordinates = read_centromere_table(centromere_table_path=centromere_table_path,
-                                                           target_chromosome_name=chromosome_name)
-        else:
-            centromere_coordinates = None
-
-        if gap_table_path is not None:
-            gap_coordinates = read_gap_table(table_path=gap_table_path,
-                                             target_chromosome_name=chromosome_name)
-        else:
-            gap_coordinates = None
-
-        if segdup_table_path is not None:
-            segdup_coordinates = read_gap_table(table_path=segdup_table_path,
-                                                target_chromosome_name=chromosome_name,
-                                                size_cutoff=10000)
-        else:
-            segdup_coordinates = None
-
-        figure, axes = plot_contigs(output_dir=output_dir,
-                                    read_data=read_data,
-                                    chromosome_name=chromosome_name,
-                                    chromosome_length=chromosome_length,
-                                    total_identity=total_identity,
-                                    bam_path=bam_path,
-                                    centromere_coordinates=centromere_coordinates,
-                                    gap_coordinates=gap_coordinates,
-                                    segdup_coordinates=segdup_coordinates,
-                                    show=False)
+    with Pool(processes=max_threads) as pool:
+        pool.starmap(get_chromosome_data, arguments)
 
 
-def main(bam_path, reference_path, output_dir, centromere_table_path, gap_table_path, segdup_table_path):
+def main(bam_path, reference_path, output_dir, centromere_table_path, gap_table_path, segdup_table_path, max_threads):
 
     process_bam(bam_path=bam_path,
                 reference_path=reference_path,
                 output_dir=output_dir,
                 centromere_table_path=centromere_table_path,
                 gap_table_path=gap_table_path,
-                segdup_table_path=segdup_table_path)
+                segdup_table_path=segdup_table_path,
+                max_threads=max_threads)
 
 
 if __name__ == "__main__":
@@ -846,8 +865,14 @@ if __name__ == "__main__":
         required=False,
         help="desired output directory path (will be created during run time if doesn't exist)"
     )
+    parser.add_argument(
+        "--max_threads", "-t",
+        type=int,
+        required=True,
+        help="FASTA file path of true reference to be compared against"
+    )
 
     args = parser.parse_args()
 
     main(bam_path=args.bam, reference_path=args.ref, output_dir=args.output_dir, centromere_table_path=args.centromeres,
-         gap_table_path=args.gap, segdup_table_path=args.seg_dups)
+         gap_table_path=args.gap, segdup_table_path=args.seg_dups, max_threads=args.max_threads)
