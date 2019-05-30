@@ -3,7 +3,7 @@ from handlers.FileManager import FileManager
 import argparse
 
 
-def main(ref_sequence_path, reads_sequence_path, output_dir=None, minimap_preset="map-ont", k=15):
+def main(ref_sequence_path, reads_sequence_path, max_threads=None, output_dir=None, minimap_preset="map-ont", k=15):
     if output_dir is None:
         output_dir = "./"
     else:
@@ -13,6 +13,7 @@ def main(ref_sequence_path, reads_sequence_path, output_dir=None, minimap_preset
                                           ref_sequence_path=ref_sequence_path,
                                           reads_sequence_path=reads_sequence_path,
                                           preset=minimap_preset,
+                                          max_threads=max_threads,
                                           k=k)
 
 
@@ -54,6 +55,13 @@ if __name__ == "__main__":
         required=False,
         help="what size k-mer to use for minimizers"
     )
+    parser.add_argument(
+        "--max_threads",
+        type=int,
+        default=None,
+        required=False,
+        help="how many vCPU to allocate for minimap"
+    )
 
     args = parser.parse_args()
 
@@ -61,4 +69,5 @@ if __name__ == "__main__":
          ref_sequence_path=args.ref,
          output_dir=args.output_dir,
          minimap_preset=args.minimap_preset,
+         max_threads=args.max_threads,
          k=args.k)
