@@ -3,7 +3,7 @@ from handlers.FileManager import FileManager
 import argparse
 
 
-def main(ref_sequence_path, reads_sequence_path, output_dir=None, minimap_preset="map-ont"):
+def main(ref_sequence_path, reads_sequence_path, output_dir=None, minimap_preset="map-ont", k=15):
     if output_dir is None:
         output_dir = "./"
     else:
@@ -12,7 +12,8 @@ def main(ref_sequence_path, reads_sequence_path, output_dir=None, minimap_preset
     reads_vs_ref_bam_path = align_minimap(output_dir=output_dir,
                                           ref_sequence_path=ref_sequence_path,
                                           reads_sequence_path=reads_sequence_path,
-                                          preset=minimap_preset)
+                                          preset=minimap_preset,
+                                          k=k)
 
 
 if __name__ == "__main__":
@@ -44,9 +45,20 @@ if __name__ == "__main__":
         default="map-ont",
         choices=["map-ont", "asm5", "asm10", "asm20"],
         required=False,
-        help="desired output directory path (will be created during run time if doesn't exist)"
+        help="which of the minimap alignment presets to use: 'map-ont', 'asm5', 'asm10', 'asm20'"
+    )
+    parser.add_argument(
+        "--k",
+        type=int,
+        default=15,
+        required=False,
+        help="what size k-mer to use for minimizers"
     )
 
     args = parser.parse_args()
 
-    main(reads_sequence_path=args.sequences, ref_sequence_path=args.ref, output_dir=args.output_dir, minimap_preset=args.minimap_preset)
+    main(reads_sequence_path=args.sequences,
+         ref_sequence_path=args.ref,
+         output_dir=args.output_dir,
+         minimap_preset=args.minimap_preset,
+         k=args.k)
