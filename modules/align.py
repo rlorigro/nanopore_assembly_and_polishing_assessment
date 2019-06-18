@@ -15,7 +15,8 @@ def align_minimap(ref_sequence_path, reads_sequence_path, max_threads=None, outp
 
     if max_threads is None:
         max_threads = max(1, cpu_count() - 2)
-        max_threads = str(max_threads)
+
+    max_threads = str(max_threads)
 
     ref_sequence_path = abspath(ref_sequence_path)
     reads_sequence_path = abspath(reads_sequence_path)
