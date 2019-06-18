@@ -29,22 +29,6 @@ N_TOTAL_DELETES = 11
 N_TOTAL_INSERTS = 12
 IDENTITY = 14
 
-# chromosome_name,
-# read_id,
-# reversal_status,
-# ref_alignment_start,
-# ref_alignment_stop,
-# ref_length,
-# read_length,
-# contig_length,
-# n_initial_clipped_bases,
-# n_total_matches,
-# n_total_mismatches,
-# n_total_deletes,
-# n_total_inserts,
-# sequence_identity,
-# alignment_identity
-
 
 def plot_distribution(step, bins, frequencies, save_location=None, title=None):
     axes = pyplot.axes()
@@ -161,6 +145,7 @@ def aggregate_summary_data(summary_file_paths, args):
                     n_deletes = int(line[N_TOTAL_DELETES])
                     n_inserts = int(line[N_TOTAL_INSERTS])
                     identity = n_matches / (n_matches + n_mismatches + n_deletes + n_inserts)
+                    # identity = (n_matches + n_deletes + n_inserts) / (n_matches + n_mismatches + n_deletes + n_inserts)
 
                     # if int(line[READ_LENGTH]) >= 1000000:
                     #     line.append(identity)
@@ -169,7 +154,7 @@ def aggregate_summary_data(summary_file_paths, args):
                     identities.append(identity)
                     read_len_to_identity.append((int(line[READ_LENGTH]), identity))
                     identities_per_file[path].append(identity)
-                    read_lengths_per_file[path].append(line[READ_LENGTH])
+                    read_lengths_per_file[path].append(int(line[READ_LENGTH]))
 
                 if len(line) != header_length:
                     # Get the names of the summary data from the first file
@@ -206,6 +191,13 @@ def aggregate_summary_data(summary_file_paths, args):
     for k in summary_headers:
         global_summary_data.append(global_summary_dict[k])
     summary_data.append(global_summary_data)
+
+    total_lengths = 0
+    for file in read_lengths_per_file.keys():
+        total_len = sum(read_lengths_per_file[file])
+        print("Total Read Length {}: {}".format(file, total_len))
+        total_len += total_lengths
+    print("Total Read Length: {}".format(total_lengths))
 
     return summary_headers, summary_data, identities, identities_per_file, read_lengths_per_file, read_len_to_identity
 
@@ -317,66 +309,72 @@ def plot_read_len_to_identity(read_len_to_identity, output_base=None, title=None
 
 
 def plot_per_file_identity_violin(raw_identities_per_file, output_base=None, title=None):
-    # step = 0.0025        # bin size
-    # max_length = 1       # end of histogram
-    #
-    # frequencies = dict()
-    # bins = numpy.arange(0, max_length + step, step=step)
-    # for key in identities_per_file.keys():
-    #     f, _ = numpy.histogram(identities_per_file[key], bins=bins)
-    #     frequencies[key] = f
-    #
-    # plot_distribution(step=step, bins=bins, frequencies=frequencies, save_location=output_location, title=title)
 
     identities_per_file = merge_dicts_by_key_idx(raw_identities_per_file, key_start_pos=8, key_end_pos=15, basename=True)
 
     # sort keys and values together
-    sorted_keys, sorted_vals = zip(*sorted(identities_per_file.items(), key=op.itemgetter(0)))
+    sorted_keys, sorted_vals = zip(*reversed(sorted(identities_per_file.items(), key=op.itemgetter(0))))
 
-    samples = ["03492", "03098", "02723", "02080", "02055", "01243", "01109", "00733", "24385", "24149", "24143", 'CHM13']
+    colors = [
+                '#af3033',
+                '#e0633a',
+                '#d7db54',
+                '#6eaa64',
+                '#50b496',
+                '#64bdc5',
+                '#00aae7',
+                '#3357b6',
+                '#25245d',
+                '#5f338b',
+                '#c8355d',
+                '#e0633a'
+              ]
 
-    colors = [(175 / 256.0, 48 / 256.0, 51 / 256.0),  # red
-              (224 / 256.0, 99 / 256.0, 58 / 256.0),  # orange
-              (215 / 256.0, 219 / 256.0, 84 / 256.0),  # yellow
-              (110 / 256.0, 170 / 256.0, 100 / 256.0),  # light green
-              (80 / 256.0, 180 / 256.0, 150 / 256.0),  # green
-              (100 / 256.0, 189 / 256.0, 197 / 256.0),  # green-blue
-              (0 / 256.0, 170 / 256.0, 231 / 256.0),  # turquoise
-              (51 / 256.0, 87 / 256.0, 182 / 256.0),  # blue
-              (37 / 256.0, 36 / 256.0, 93 / 256.0),  # indigo
-              (95 / 256.0, 51 / 256.0, 139 / 256.0),  # purple
-              (200 / 256.0, 53 / 256.0, 93 / 256.0),  # pink
-    ]
 
     # print mmm
+    all_identities = list()
     for key in sorted_keys:
         mmm(identities_per_file[key], identifier=key)
+        all_identities.extend(identities_per_file[key])
+    all_mean, all_median, all_mode = mmm(all_identities, "ALL")
 
     # sns.set_palette(sns.husl_palette(len(sorted_keys)))
     sns.set(style='white')
-    ax = sns.violinplot(data=sorted_vals, inner=None, linewidth=0, cut=0, palette=sns.color_palette("husl", 8))
+    ax = sns.violinplot(data=sorted_vals, inner=None, linewidth=0, cut=0, palette=colors)
+    # ax = sns.violinplot(data=sorted_vals, inner=None, linewidth=0, cut=0, palette=sns.color_palette("husl", len(sorted_keys)))
     pyplot.setp(ax.collections, alpha=.8)
 
     # category labels
     pyplot.xticks(pyplot.xticks()[0], sorted_keys)
-    pyplot.ylabel("Identities")
-    pyplot.xlabel("Samples")
-    pyplot.ylim(0.4, 1.05)
+    pyplot.ylabel("Identities", fontsize=16)
+    # pyplot.xlabel("Samples", fontsize=16)
+    pyplot.xlabel("", fontsize=16)
+    pyplot.ylim(0.55, 1.05)
+    pyplot.xlim(-1, len(sorted_keys))
+
+    for label in ax.xaxis.get_majorticklabels():
+        label.set_fontsize(16)
+    for label in ax.yaxis.get_majorticklabels():
+        label.set_fontsize(16)
+
+    pyplot.hlines(all_median, -1, len(sorted_keys)+1, linestyles='dashed')
+    pyplot.hlines(all_mode, -1, len(sorted_keys)+1, linestyles='dotted')
 
     if output_base is not None:
         pyplot.savefig("{}.identity_violin.png".format(output_base))
+        pyplot.savefig("{}.identity_violin.pdf".format(output_base))
     pyplot.show()
     pyplot.close()
 
 
 def plot_identity_comparison_violin(left_identities_per_file, right_identities_per_file, left_lengths_per_file,
                                     right_lengths_per_file, title=None, output_base=None):
-    left_key = "Flipflop"
-    right_key = "Non-Flipflop"
+    left_key = "Standard"
+    right_key = "RLE"
     # left_key = "No Filter"
     # right_key = "GTE Q7"
     name_key_start=8
-    name_key_end=19
+    name_key_end=15
 
     left_identities_per_file = merge_dicts_by_key_idx(left_identities_per_file, key_start_pos=name_key_start,
                                                       key_end_pos=name_key_end, basename=True)
@@ -404,6 +402,8 @@ def plot_identity_comparison_violin(left_identities_per_file, right_identities_p
     hands = list()
     idents = list()
     samples = list()
+    colors = {"Standard": '#4372c0', "RLE": '#99aadd'}
+    '#6387c6'
 
     # for scaling the plot by total length
     left_lengths_per_file = merge_dicts_by_key_idx(left_lengths_per_file, key_start_pos=name_key_start,
@@ -432,14 +432,26 @@ def plot_identity_comparison_violin(left_identities_per_file, right_identities_p
             samples.append(k)
     df = pd.DataFrame({"Sample": samples, "Identity": idents, "Filter Type": hands})
 
-    sns.violinplot(x="Sample", y="Identity", hue="Filter Type", order=ordered_keys, hue_order=ordered_hues,
-                   data=df, split=True, inner='quartile',
+
+    # sns.set_style('whitegrid')
+    ax1 = sns.violinplot(x="Sample", y="Identity", hue="Filter Type", order=ordered_keys, hue_order=ordered_hues,
+                   palette=colors, saturation=15,
+                   data=df, split=True, inner='quartile',linewidth=1,
                    scale='width')
                    # scale='custom', custom_hue_scale=lenght_scale_per_file)
-    pyplot.legend(loc=4)
+    pyplot.ylim([.6, 1.0])
+    pyplot.xlabel('')
+    pyplot.ylabel("Identity", fontsize=15)
+    pyplot.legend(loc=4, fontsize=15)
+
+    for label in ax1.xaxis.get_majorticklabels():
+        label.set_fontsize(15)
+    for label in ax1.yaxis.get_majorticklabels():
+        label.set_fontsize(15)
 
     if output_base is not None:
         pyplot.savefig("{}.identity_comparison_violin.png".format(output_base))
+        pyplot.savefig("{}.identity_comparison_violin.pdf".format(output_base))
     pyplot.show()
     pyplot.close()
 
@@ -521,7 +533,6 @@ def main(summary_glob, output_dir, filter_decoys, args):
     # all_read_lengths.sort()
     # print("top 15 read lengths: {}".format(all_read_lengths[:-15]))
 
-
     for file in identities_per_file.keys():
         mmm(identities_per_file[file], file)
     mmm(identities, "All Data")
@@ -530,29 +541,27 @@ def main(summary_glob, output_dir, filter_decoys, args):
     if sample_name is None:
         sample_name = summary_glob.rstrip('/').replace('/', "_").replace('*', "_")  # replace this with sample name extractor function?
 
-    # save to file
-    # write_chromosomal_summary_data_to_csv(summary_headers=summary_headers,
-    #                                       summary_data=summary_data,
-    #                                       sample_name=sample_name,
-    #                                       output_dir=output_dir)
-
     # plots
     if args.plot:
         pass
 
         # plot_identity_histogram(identities, title=sample_name, output_location=os.path.join(output_dir, "{}.all_identities.png".format(sample_name)))
         # plot_read_len_to_identity(read_len_to_identity, title=sample_name, output_base=os.path.join(output_dir, "{}.read_len_to_identity".format(sample_name)))
-        plot_per_file_identity_violin(identities_per_file, title=sample_name,
-                                      output_base=os.path.join(output_dir, sample_name))
         # plot_per_file_identity_curve(identities_per_file, output_base=os.path.join(output_dir, sample_name))
-        # if args.comparison_glob is not None:
-        #     comparison_paths = glob.glob(args.comparison_glob)
-        #     if len(comparison_paths) == 0:
-        #         raise Exception("No comparison files found for '{}'".format(args.comparison_glob))
-        #     _, _, _, comparison_identities_per_file, comparison_lengths_per_file, _ = aggregate_summary_data(comparison_paths, args)
-        #     plot_identity_comparison_violin(identities_per_file, comparison_identities_per_file,
-        #                                     read_lengths_per_file, comparison_lengths_per_file,
-        #                                     title=sample_name, output_base=os.path.join(output_dir, sample_name))
+        if args.comparison_glob is None:
+            plot_per_file_identity_violin(identities_per_file, title=sample_name,
+                                          output_base=os.path.join(output_dir, sample_name))
+        else:
+            comparison_paths = glob.glob(args.comparison_glob)
+            if len(comparison_paths) == 0:
+                raise Exception("No comparison files found for '{}'".format(args.comparison_glob))
+
+            #TODO only for rle experiment
+            args.min_read_length *= 0.7
+            _, _, _, comparison_identities_per_file, comparison_lengths_per_file, _ = aggregate_summary_data(comparison_paths, args)
+            plot_identity_comparison_violin(identities_per_file, comparison_identities_per_file,
+                                            read_lengths_per_file, comparison_lengths_per_file,
+                                            title=sample_name, output_base=os.path.join(output_dir, sample_name))
 
 
 
