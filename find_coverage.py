@@ -117,7 +117,7 @@ def test():
     pyplot.close()
 
 
-def main(bam_path, chromosome_name, start, stop, n_samples):
+def main(bam_path, chromosome_name, start, stop, n_samples, y_max=None):
     """
     :param bam_path: BAM of reads aligned to some sequence
     :param chromosome_name:
@@ -151,17 +151,23 @@ def main(bam_path, chromosome_name, start, stop, n_samples):
     sys.stderr.write("\n")
 
     axes = pyplot.axes()
-    axes.scatter(positions, coverages, s=0.5)
-    axes.set_ylim([0, round(max_coverage*1.1)])
+    # axes.scatter(positions, coverages, s=0.5)
+    axes.plot(positions, coverages)
     axes.set_title("Coverage on %s" % chromosome_name)
     axes.set_ylabel("Coverage (# reads)")
     axes.set_xlabel("Coordinate")
+
+    if y_max is None:
+        axes.set_ylim([0, round(max_coverage*1.1)])
+    else:
+        axes.set_ylim([0, y_max])
 
     pyplot.xticks(rotation=45)
     axes.ticklabel_format(useOffset=False, style='plain')
     pyplot.tight_layout()
 
     pyplot.savefig("coverage.png", dpi=300)
+    pyplot.savefig("coverage.pdf", dpi=300)
 
     pyplot.show()
     pyplot.close()
@@ -199,7 +205,13 @@ if __name__ == "__main__":
         required=False,
         help="How many times to sample the region"
     )
+    parser.add_argument(
+        "--y_max", "-y",
+        type=int,
+        required=False,
+        help="Optionally fix the y limit for plotting (coverage axis)"
+    )
 
     args = parser.parse_args()
 
-    main(bam_path=args.bam, chromosome_name=args.contig, start=args.start, stop=args.stop, n_samples=args.samples)
+    main(bam_path=args.bam, chromosome_name=args.contig, start=args.start, stop=args.stop, n_samples=args.samples, y_max=args.y_max)
