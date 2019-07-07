@@ -109,6 +109,22 @@ def filter_supplementaries_by_largest(data_per_bac):
 
     return filtered_data
 
+def aggregate_bac_data(data_per_bac):
+    filtered_data = list()
+
+    for bac_name in data_per_bac:
+        bac_data = data_per_bac[bac_name]
+
+        for d,data in enumerate(sorted(bac_data, key=lambda x: x[REF_ALIGNMENT_START])):
+
+            identity = data[N_MATCHES]/(data[N_MATCHES]+data[N_TOTAL_MISMATCHES]+data[N_TOTAL_INSERTS]+data[N_TOTAL_DELETES])
+            score = data[N_MATCHES]
+
+            filtered_data.append(data + [identity])
+
+    print(filtered_data)
+
+    return filtered_data
 
 def process_bam(bam_path, reference_path, bac_path, output_dir=None):
     """
@@ -150,7 +166,8 @@ def process_bam(bam_path, reference_path, bac_path, output_dir=None):
         for data in read_data:
             data_per_bac[data[0]].append([chromosome_name] + data)
 
-    filtered_data = filter_supplementaries_by_largest(data_per_bac)
+    # filtered_data = filter_supplementaries_by_largest(data_per_bac)
+    filtered_data = aggregate_bac_data(data_per_bac)
 
     export_bac_data_to_csv(read_data=filtered_data,
                            output_dir=output_dir,
@@ -170,7 +187,7 @@ if __name__ == "__main__":
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--bam",
+        "--bam_glob",
         type=str,
         required=True,
         help="BAM file path of contigs aligned to true reference"
