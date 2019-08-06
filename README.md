@@ -17,6 +17,8 @@ Automation of pipelines that depend on preexisting assembly, polishing, and alig
 
 ## Examples
 
+### Alignment Visualization
+
 Running contig identity and mapping assessment:
 ```
 align_and_summarize_contigs.py --sequences SEQUENCES --ref REF [--output_dir OUTPUT_DIR]
@@ -57,3 +59,11 @@ identity:        0.9953598381930079
 
 TOTAL IDENTITY:  0.9954066201845397
 ```
+
+### NG(A)x Generation and Plotting
+
+![example output plot](https://github.com/rlorigro/nanopore_assembly_and_polishing_assessment/blob/master/shasta_2019_6_28_10_39_18_878109.png)
+
+### Coverage Estimation
+
+![example output plot](https://github.com/rlorigro/nanopore_assembly_and_polishing_assessment/blob/master/squashed_coverage_733_maternal.png)
