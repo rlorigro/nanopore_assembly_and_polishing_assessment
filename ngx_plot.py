@@ -103,6 +103,30 @@ def get_all_contig_lengths_from_quast_logs_dir(parent_directory, recursive=True)
     return assembly_contigs
 
 
+def get_contig_lengths_from_csv(csv_path):
+    assembly_path = None
+    assembly_contigs = dict()
+
+    with open(csv_path, "r") as file:
+        for l,line in enumerate(file):
+            if line[0] == ">":
+                # Field 1
+                assembly_path = line.strip()[1:]
+
+            if line[0] != ">":
+                # Field 2
+                lengths = line.strip().split(",")
+                lengths = list(map(int, lengths))
+
+                names = ["ctg%d" % i for i in range(len(lengths))]
+
+                contigs = list(zip(reversed(names),reversed(lengths)))
+
+                assembly_contigs[assembly_path] = contigs
+
+    return assembly_contigs
+
+
 def get_all_lengths(assembly_path, recursive=False):
     if os.path.isdir(assembly_path):
         assembly_paths = FileManager.get_all_file_paths_by_type(parent_directory_path=assembly_path,
@@ -318,18 +342,18 @@ def generate_ngx_plot(assembly_contigs, input_dir, genome_size=None, y_max=180, 
 
     axes.axvline(0.5, linestyle="--", alpha=0.3, linewidth=0.7, zorder=-1)
 
-    max_size = y_max
-
-    step_size = 20
-    if step_size >= y_max:
-        step_size = 1
-
-    scale = 1_000_000
-
-    axes.set_xlim([0,1])
-    axes.set_ylim([0,max_size*scale])
-    axes.set_yticks(numpy.arange(0,max_size+step_size,step_size)*scale)
-    axes.set_yticklabels(numpy.arange(0,max_size+step_size,step_size))
+    # max_size = y_max
+    #
+    # step_size = 20
+    # if step_size >= y_max:
+    #     step_size = 1
+    #
+    # scale = 1_000_000
+    #
+    # axes.set_xlim([0,1])
+    # axes.set_ylim([0,max_size*scale])
+    # axes.set_yticks(numpy.arange(0,max_size+step_size,step_size)*scale)
+    # axes.set_yticklabels(numpy.arange(0,max_size+step_size,step_size))
 
     axes.set_title(title)
     axes.set_ylabel("Contig/scaffold size (Mbp)")
@@ -345,11 +369,10 @@ def generate_ngx_plot(assembly_contigs, input_dir, genome_size=None, y_max=180, 
     figure.savefig(file_path + ".png", dpi=300)
     figure.savefig(file_path + ".pdf", dpi=300)
 
-    # pyplot.show()
     pyplot.close()
 
 
-def main(assembly_path, alignment_path, quast_path, genome_size, share_axes, y_max, recursive):
+def main(assembly_path, alignment_path, quast_path, csv_path, genome_size, share_axes, y_max, recursive, nx):
     if share_axes:
         figure = pyplot.figure()
         axes = pyplot.axes()
@@ -389,7 +412,33 @@ def main(assembly_path, alignment_path, quast_path, genome_size, share_axes, y_m
                           axes=axes,
                           y_max=y_max)
 
-    if assembly_path is None and alignment_path is None and quast_path is None:
+    if csv_path is not None:
+        assembly_contigs = get_contig_lengths_from_csv(csv_path=csv_path)
+
+        if nx:
+            genome_size = 0
+            for key in assembly_contigs:
+                size = 0
+                for item in assembly_contigs[key]:
+                    size += item[LENGTH]
+
+                if size > genome_size:
+                    genome_size = size
+
+            title = "Nx"
+
+        else:
+            title = "NGx"
+
+        generate_ngx_plot(assembly_contigs=assembly_contigs,
+                          input_dir=csv_path,
+                          genome_size=genome_size,
+                          title=title,
+                          figure=figure,
+                          axes=axes,
+                          y_max=y_max)
+
+    if assembly_path is None and alignment_path is None and quast_path is None and csv_path is None:
         exit("No input directory provided, please provide one of the following: \n"
              "\t- An assembly FASTA file path"
              "\t- A BAM alignment of assembly to ref ")
@@ -435,10 +484,23 @@ if __name__ == "__main__":
         help="path of parent directory containing quast logs of NAx/NGAx anywhere within"
     )
     parser.add_argument(
+        "--csv",
+        type=str,
+        required=False,
+        help="path of parent directory containing fasta-like csvs anywhere within"
+    )
+    parser.add_argument(
         "--genome_size",
         type=int,
         required=False,
         help="length of genome size for NGX"
+    )
+    parser.add_argument(
+        "--nx",
+        type="bool",
+        default="False",
+        required=False,
+        help="Plot Nx instead of NGX"
     )
     parser.add_argument(
         "--y_max",
@@ -466,6 +528,8 @@ if __name__ == "__main__":
          alignment_path=args.alignment,
          genome_size=args.genome_size,
          quast_path=args.quast,
+         csv_path=args.csv,
          share_axes=args.share,
          y_max=args.y_max,
-         recursive=args.recursive)
+         recursive=args.recursive,
+         nx=args.nx)
