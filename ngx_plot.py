@@ -577,7 +577,7 @@ if __name__ == "__main__":
          alignment_path=args.alignment,
          genome_size=args.genome_size,
          quast_path=args.quast,
-         phaseblock_path=args.phaseblock,
+         phaseblock_path=args.phaseblocks,
          csv_path=args.csv,
          share_axes=args.share,
          y_max=args.y_max,
