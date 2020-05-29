@@ -127,6 +127,38 @@ def get_contig_lengths_from_csv(csv_path):
     return assembly_contigs
 
 
+def get_contig_lengths_from_phaseblock_csvs(parent_directory):
+    print(parent_directory)
+    paths = FileManager.get_all_file_paths_by_type(parent_directory_path=parent_directory, file_extension="csv")
+    print(paths)
+
+    assembly_contigs = dict()
+    names = list()
+    lengths = list()
+
+    for path in paths:
+        with open(path, "r") as file:
+            for l,line in enumerate(file):
+                print(line)
+
+                if len(line) == 0:
+                    continue
+
+                items = line.strip().split(",")
+                length = int(items[-1]) - int(items[-2])
+
+                print(length)
+                lengths.append(length)
+                names.append(items[1])
+
+            contigs = list(zip(names,lengths))
+            contigs = sorted(contigs, key=lambda x: x[1], reverse=True)
+
+            assembly_contigs[path] = contigs
+
+    return assembly_contigs
+
+
 def get_all_lengths(assembly_path, recursive=False):
     if os.path.isdir(assembly_path):
         assembly_paths = FileManager.get_all_file_paths_by_type(parent_directory_path=assembly_path,
@@ -192,40 +224,37 @@ def get_all_aligned_lengths(bam_path, recursive=False):
 
 
 def generate_ngx_plot(assembly_contigs, input_dir, genome_size=None, y_max=180, title="NGx", figure=None, axes=None):
-    samples = ["03492", "03098", "02723", "02080", "02055", "01243", "01109", "00733", "24385", "24149", "24143", "CHM13", "hg38_no_alts"]
-
-    colors = [(175/256.0,   48/256.0,   51/256.0),  # red
-              (224/256.0,   99/256.0,   58/256.0),  # orange
-              (215/256.0,   219/256.0,  84/256.0),  # yellow
-              (110/256.0,   170/256.0,  100/256.0),  # light green
-              (80/256.0,    180/256.0,  150/256.0),  # green
-              (100/256.0,   189/256.0,  197/256.0),  # green-blue
-              (0/256.0,     170/256.0,  231/256.0),  # turquoise
-              (51/256.0,    87/256.0,   182/256.0),  # blue
-              (37/256.0,    36/256.0,   93/256.0),  # indigo
-              (95/256.0,    51/256.0,   139/256.0),  # purple
-              (200/256.0,   53/256.0,   93/256.0),  # pink
-              (224/256.0,   99/256.0,   58/256.0),
-              (110/256.0,   170/256.0,  100/256.0)]
-
-    alphas = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1.0, 0.3, 0.3, 0.3, 1.0, 1.0]
-    zorders = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1]
-
-    labels = {}
+    # samples = ["03492", "03098", "02723", "02080", "02055", "01243", "01109", "00733", "24385", "24149", "24143", "CHM13", "hg38_no_alts"]
+    #
+    # colors = [(175/256.0,   48/256.0,   51/256.0),  # red
+    #           (224/256.0,   99/256.0,   58/256.0),  # orange
+    #           (215/256.0,   219/256.0,  84/256.0),  # yellow
+    #           (110/256.0,   170/256.0,  100/256.0),  # light green
+    #           (80/256.0,    180/256.0,  150/256.0),  # green
+    #           (100/256.0,   189/256.0,  197/256.0),  # green-blue
+    #           (0/256.0,     170/256.0,  231/256.0),  # turquoise
+    #           (51/256.0,    87/256.0,   182/256.0),  # blue
+    #           (37/256.0,    36/256.0,   93/256.0),  # indigo
+    #           (95/256.0,    51/256.0,   139/256.0),  # purple
+    #           (200/256.0,   53/256.0,   93/256.0),  # pink
+    #           (224/256.0,   99/256.0,   58/256.0),
+    #           (110/256.0,   170/256.0,  100/256.0)]
+    #
+    # alphas = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1.0, 0.3, 0.3, 0.3, 1.0, 1.0]
+    # zorders = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1]
+    #
+    # labels = {}
 
     # ---------------------------------------------------------------------------
 
-    # samples = ["shasta", "wtdbg2", "canu", "flye"]
-    #
-    # colors = [(0.890,0.120,0.031),
-    #           (0.999,0.696,0.031),  # (112/256, 37/256, 163/256)
-    #           (0.039,0.463,0.58),
-    #           (0.024,0.69,0.224)]
-    #
-    # zorders = [1,0,0,0]
-    # alphas = [1,0.9,1,1]
-    #
-    # labels = {}
+    samples = ["PEPPER"]
+
+    colors = [(100/256.0,   189/256.0,  197/256.0)]
+
+    zorders = [1,0,0,0]
+    alphas = [1,0.9,1,1]
+
+    labels = {}
 
     # ---------------------------------------------------------------------------
     #
@@ -330,8 +359,9 @@ def generate_ngx_plot(assembly_contigs, input_dir, genome_size=None, y_max=180, 
         if "hifi" in path.lower():
             label = "Canu CCS"
 
-        if "shasta" in path:
-            label = "Shasta Nanopore"
+        if "PEPPER" in path:
+            label = "HG002 Guppy v3.6.0 PEPPER DV"
+            alpha = 1
 
         if label not in legend_names:
             legend_names.append(label)
@@ -350,14 +380,14 @@ def generate_ngx_plot(assembly_contigs, input_dir, genome_size=None, y_max=180, 
     #
     # scale = 1_000_000
     #
-    # axes.set_xlim([0,1])
+    axes.set_xlim([0,1])
     # axes.set_ylim([0,max_size*scale])
     # axes.set_yticks(numpy.arange(0,max_size+step_size,step_size)*scale)
     # axes.set_yticklabels(numpy.arange(0,max_size+step_size,step_size))
 
     axes.set_title(title)
-    axes.set_ylabel("Contig/scaffold size (Mbp)")
-    axes.set_xlabel("Cumulative coverage")
+    axes.set_ylabel("Size (Mbp)")
+    axes.set_xlabel("Cumulative Coverage")
 
     FileManager.ensure_directory_exists("output")
 
@@ -372,7 +402,7 @@ def generate_ngx_plot(assembly_contigs, input_dir, genome_size=None, y_max=180, 
     pyplot.close()
 
 
-def main(assembly_path, alignment_path, quast_path, csv_path, genome_size, share_axes, y_max, recursive, nx):
+def main(assembly_path, alignment_path, quast_path, csv_path, phaseblock_path, genome_size, share_axes, y_max, recursive, nx):
     if share_axes:
         figure = pyplot.figure()
         axes = pyplot.axes()
@@ -438,9 +468,22 @@ def main(assembly_path, alignment_path, quast_path, csv_path, genome_size, share
                           axes=axes,
                           y_max=y_max)
 
-    if assembly_path is None and alignment_path is None and quast_path is None and csv_path is None:
+    if phaseblock_path is not None:
+        assembly_contigs = get_contig_lengths_from_phaseblock_csvs(parent_directory=phaseblock_path)
+        generate_ngx_plot(assembly_contigs=assembly_contigs,
+                          input_dir=phaseblock_path,
+                          genome_size=genome_size,
+                          title="Phase Block NGx",
+                          figure=figure,
+                          axes=axes,
+                          y_max=y_max)
+
+
+    if assembly_path is None and alignment_path is None and quast_path is None and csv_path is None and phaseblock_path is None:
         exit("No input directory provided, please provide one of the following: \n"
              "\t- An assembly FASTA file path"
+             "\t- A quast NGx output csv directory path (fork from github.com/rlorigro/quast)"
+             "\t- A phaseblock csv directory path"
              "\t- A BAM alignment of assembly to ref ")
 
 
@@ -479,6 +522,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--quast",
+        type=str,
+        required=False,
+        help="path of parent directory containing quast logs of NAx/NGAx anywhere within"
+    )
+    parser.add_argument(
+        "--phaseblocks",
         type=str,
         required=False,
         help="path of parent directory containing quast logs of NAx/NGAx anywhere within"
@@ -528,6 +577,7 @@ if __name__ == "__main__":
          alignment_path=args.alignment,
          genome_size=args.genome_size,
          quast_path=args.quast,
+         phaseblock_path=args.phaseblock,
          csv_path=args.csv,
          share_axes=args.share,
          y_max=args.y_max,
